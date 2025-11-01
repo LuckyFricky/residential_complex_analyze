@@ -2,71 +2,80 @@ import streamlit as st
 import pandas as pd
 import folium
 from streamlit_folium import st_folium
+import os
 
 # ===========================
-# 1. ДАННЫЕ (заменить на свои)
+# ЗАГРУЗКА ДАННЫХ ИЗ ПАПКИ
 # ===========================
 @st.cache_data
-def load_data():
-    return pd.DataFrame({
-        "id": [1, 2, 3],
-        "name": ["ЖК 'Небо'", "ЖК 'Река'", "ЖК 'Парк'"],
-        "address": [
-            "г. Москва, Ленинский проспект, 100",
-            "г. Москва, ул. Профсоюзная, 50",
-            "г. Москва, Дмитровское шоссе, 30"
-        ],
-        "lat": [55.6893, 55.6482, 55.8521],
-        "lon": [37.5412, 37.5689, 37.5306],
-        "total_apartments": [600, 420, 300],
-        "studios": [180, 100, 60],
-        "one_room": [240, 180, 120],
-        "two_room": [150, 180, 90],
-        "three_plus_room": [30, 60, 30],
-        "elevators": [8, 6, 4],
-        "parking_spots": [400, 250, 180],
-        "playgrounds": [3, 2, 1],
-        "sports_areas": [2, 1, 1],
-        "has_bike_paths": [True, False, True],
-        "ceiling_min": [2.7, 2.65, 2.8],
-        "floors_min": [10, 9, 8],
-        "floors_max": [25, 18, 12]
-    })
+def load_jk_data():
+    # Путь к папке с данными
+    DATA_DIR = "data"
+    if not os.path.exists(DATA_DIR):
+        st.error(f"Папка '{DATA_DIR}' не найдена. Создайте её и положите туда .xlsx файлы.")
+        return pd.DataFrame()
 
-df = load_data()
+    all_records = []
+    for file in os.listdir(DATA_DIR):
+        if file.endswith("important.xlsx"):
+            filepath = os.path.join(DATA_DIR, file)
+            try:
+                df_sheet = pd.read_excel(filepath, header=None, names=["field", "value"])
+                record = dict(zip(df_sheet["field"], df_sheet["value"]))
+                # Извлечение названия ЖК из имени файла
+                name = os.path.splitext(file)[0].replace("ZHK_", "").replace("_important", "").replace("_", " ").title()
+                record["name"] = name
+                record["lat"] = record.get("Ширина")
+                record["lon"] = record.get("Долгота")
+                all_records.append(record)
+            except Exception as e:
+                st.warning(f"Не удалось прочитать {file}: {e}")
+
+    if not all_records:
+        return pd.DataFrame()
+    return pd.DataFrame(all_records)
+
+df = load_jk_data()
 
 # ===========================
-# 2. ИНИЦИАЛИЗАЦИЯ СОСТОЯНИЯ
+# ПРОВЕРКА ДАННЫХ
+# ===========================
+if df.empty:
+    st.title("🏙️ Дашборд жилых комплексов Москвы")
+    st.error("Нет данных. Положите Excel-файлы в папку `data/`.")
+    st.stop()
+
+# Убедимся, что координаты числовые
+df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
+df = df.dropna(subset=["lat", "lon"])
+
+# ===========================
+# СОСТОЯНИЕ ВЫБРАННОГО ЖК
 # ===========================
 if "selected_jk" not in st.session_state:
     st.session_state.selected_jk = None
 
 # ===========================
-# 3. ЗАГОЛОВОК
+# ИНТЕРФЕЙС
 # ===========================
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
-st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию о ЖК.")
+st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")
 
 # ===========================
-# 4. КАРТА С КЛИКАБЕЛЬНЫМИ МЕТКАМИ
+# КАРТА
 # ===========================
-st.subheader("Карта ЖК")
-
-# Центрируем на Москве
 moscow_center = [55.7522, 37.6156]
 m = folium.Map(location=moscow_center, zoom_start=10, tiles="CartoDB positron")
 
-# Добавляем маркеры
 for _, row in df.iterrows():
-    # Создаём HTML-попап с кнопкой (на самом деле — ссылка, эмулирующая выбор)
     popup_html = f"""
-    <div style="width: 200px;">
+    <div style="width: 220px;">
         <b>{row['name']}</b><br>
-        {row['address']}<br><br>
-        <a href="?jk_id={row['id']}" target="_self" style="text-decoration: none;">
-            <button style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px;">
-                Показать детали
+        <a href="?jk_name={row['name']}" target="_self" style="text-decoration: none;">
+            <button style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px;">
+                Подробнее
             </button>
         </a>
     </div>
@@ -77,57 +86,63 @@ for _, row in df.iterrows():
         tooltip=row["name"]
     ).add_to(m)
 
-# Отображаем карту
-map_data = st_folium(m, width=800, height=500)
+st_folium(m, width=900, height=500)
 
 # ===========================
-# 5. ОБРАБОТКА ВЫБОРА ЖК ЧЕРЕЗ URL-ПАРАМЕТР
+# ОБРАБОТКА ВЫБОРА ЧЕРЕЗ URL
 # ===========================
-# Streamlit не поддерживает прямые callback'и, но можно парсить query params
-from urllib.parse import parse_qs, urlparse
-import streamlit as st
-
 query_params = st.experimental_get_query_params()
-jk_id = query_params.get("jk_id", [None])[0]
+jk_name = query_params.get("jk_name", [None])[0]
 
-if jk_id is not None:
-    try:
-        jk_id = int(jk_id)
-        selected_row = df[df["id"] == jk_id].iloc[0]
-        st.session_state.selected_jk = selected_row
-    except (ValueError, IndexError):
-        st.session_state.selected_jk = None
+if jk_name:
+    selected_rows = df[df["name"] == jk_name]
+    if not selected_rows.empty:
+        st.session_state.selected_jk = selected_rows.iloc[0].to_dict()
 
 # ===========================
-# 6. ПАНЕЛЬ С ДЕТАЛЯМИ
+# ДЕТАЛИ
 # ===========================
 st.subheader("Подробная информация")
 
-if st.session_state.selected_jk is not None:
+if st.session_state.selected_jk:
     jk = st.session_state.selected_jk
     
     st.markdown(f"### 🏢 {jk['name']}")
-    st.markdown(f"**Адрес:** {jk['address']}")
     
+    # Основные метрики
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Всего квартир", jk["total_apartments"])
-        st.metric("Студии", jk["studios"])
-        st.metric("1-комн.", jk["one_room"])
+        st.metric("Квартиры всего", int(jk.get("Количество жилых помещений", 0)))
+        st.metric("Студии", int(jk.get("Количество студий", 0)))
+        st.metric("1-комн.", int(jk.get("Количество однокомнатных квартир", 0)))
     with col2:
-        st.metric("2-комн.", jk["two_room"])
-        st.metric("3+ комнат", jk["three_plus_room"])
-        st.metric("Этажность", f"{jk['floors_min']}–{jk['floors_max']}")
+        st.metric("2-комн.", int(jk.get("Количество двухкомнатных квартир", 0)))
+        st.metric("3-комн.", int(jk.get("Количество трехкомнатных квартир", 0)))
+        st.metric("4+ комнат", int(jk.get("Количество 4 и 4+ комнатных квартир", 0)))
     with col3:
-        st.metric("Лифтов", jk["elevators"])
-        st.metric("Машиномест", jk["parking_spots"])
-        st.metric("Детских площадок", jk["playgrounds"])
+        st.metric("Лифтов", int(jk.get("Количество лифтов", 0)))
+        st.metric("Подъездов", int(jk.get("Количество подъездов", 0)))
+        st.metric("Машиномест (паркинг)", int(jk.get("Количество машино-мест в паркинге", 0)))
 
     st.markdown("---")
-    st.markdown("#### 📊 Дополнительно")
-    st.write(f"- Мин. высота потолков: {jk['ceiling_min']} м")
-    st.write(f"- Спортивных площадок: {jk['sports_areas']}")
-    st.write(f"- Велодорожки: {'Да' if jk['has_bike_paths'] else 'Нет'}")
+    st.markdown("#### 📊 Инфраструктура и доступность")
+    infra_col1, infra_col2 = st.columns(2)
+    with infra_col1:
+        st.write(f"- Детских площадок: {int(jk.get('Количество детских площадок', 0))}")
+        st.write(f"- Спортивных площадок: {int(jk.get('Количество спортивных площадок', 0))}")
+        st.write(f"- Велодорожки: {'Да' if jk.get('Наличие велосипедных дорожек') else 'Нет'}")
+        st.write(f"- Тротуары: {'Да' if jk.get('Наличие тротуаров') else 'Нет'}")
+    with infra_col2:
+        st.write(f"- Пандус: {'Да' if jk.get('Наличие пандуса') else 'Нет'}")
+        st.write(f"- Инвалидных подъёмников: {int(jk.get('Количество инвалидных подъемников', 0))}")
+        st.write(f"- Понижающие бордюры: {'Да' if jk.get('Наличие понижающих площадок') else 'Нет'}")
+        st.write(f"- Обеспеченность машиноместами: {jk.get('Обеспеченность машиноместами', '—')}")
 
+    st.markdown("---")
+    st.markdown("#### 📐 Архитектурные параметры")
+    st.write(f"- Мин. высота потолков: {jk.get('Минимальная высота потолков', '—')} м")
+    st.write(f"- Макс. высота потолков: {jk.get('Максимальная высота потолков', '—')} м")
+    st.write(f"- Этажность: {int(jk.get('Минимальное количество этажей', 0))}–{int(jk.get('Максимальное количество этажей', 0))}")
+    st.write(f"- Средняя общая площадь квартиры: {jk.get('Средняя общая площадь, м2', '—')} м²")
 else:
-    st.info("Выберите ЖК на карте, чтобы увидеть подробности.")
+    st.info("Выберите ЖК на карте для просмотра деталей.")

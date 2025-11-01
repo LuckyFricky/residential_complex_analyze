@@ -85,11 +85,10 @@ for _, row in df.iterrows():
     popup_html = f"""
 <div style="width: 220px;">
     <b>{row['name']}</b><br>
-    <a href="?jk_name={row['name']}" target="_top" style="text-decoration: none;">
-        <button style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px;">
-            Подробнее
-        </button>
-    </a>
+    <button onclick="window.parent.location.search='?jk_name={row['name'].replace(' ', '%20')}'"
+            style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px; cursor: pointer;">
+        Подробнее
+    </button>
 </div>
 """
     folium.Marker(

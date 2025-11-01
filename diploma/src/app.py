@@ -108,7 +108,8 @@ if jk_name:
     selected_rows = df[df["name"] == jk_name]
     if not selected_rows.empty:
         st.session_state.selected_jk = selected_rows.iloc[0].to_dict()
-
+else:
+    st.session_state.selected_jk = None
 # ===========================
 # ДЕТАЛИ
 # ===========================

@@ -28,20 +28,14 @@ def load_jk_data():
         if file.endswith(".xlsx"):
             filepath = os.path.join(DATA_DIR, file)
             try:
-                # Читаем как есть: 2 столбца
-                df_raw = pd.read_excel(filepath, header=None, names=["field", "value"])
-                
-                # Удаляем пустые строки
-                df_raw = df_raw.dropna(subset=["field"]).reset_index(drop=True)
-                
-                # Поворачиваем: из строк → в колонки
-                df_wide = df_raw.set_index("field").T  # теперь 1 строка, много колонок
+                # Читаем как обычную таблицу с заголовками
+                df_one = pd.read_excel(filepath)
                 
                 # Добавляем имя ЖК
                 name = os.path.splitext(file)[0].replace("ZHK_", "").replace("_important", "").replace("_", " ").title()
-                df_wide["name"] = name
+                df_one["name"] = name
                 
-                all_dfs.append(df_wide)
+                all_dfs.append(df_one)
                 
             except Exception as e:
                 st.warning(f"Ошибка при чтении {file}: {e}")
@@ -49,13 +43,12 @@ def load_jk_data():
     if not all_dfs:
         return pd.DataFrame()
     
-    # Объединяем все ЖК в одну таблицу
     df = pd.concat(all_dfs, ignore_index=True)
     
-    # Приводим координаты к числу
-    for col in ["Ширина", "Долгота"]:
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
+    # Убедимся, что координаты числовые
+    df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
+    df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
+    df = df.dropna(subset=["lat", "lon"])
     
     return df
 
@@ -65,6 +58,8 @@ st.write("Загруженные данные:")
 st.dataframe(df[["name", "lat", "lon"]])
 st.write("Типы данных:")
 st.write(df[["lat", "lon"]].dtypes)
+st.write("Пример данных:")
+st.dataframe(df[["name", "Ширина", "Долгота"]])
 
 # ===========================
 # ПРОВЕРКА ДАННЫХ

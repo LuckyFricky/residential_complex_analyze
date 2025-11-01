@@ -18,31 +18,46 @@ def clean_numeric(x):
         
 @st.cache_data
 def load_jk_data():
-    # Путь к папке с данными
     DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
     if not os.path.exists(DATA_DIR):
-        st.error(f"Папка '{DATA_DIR}' не найдена. Создайте её и положите туда .xlsx файлы.")
+        st.error(f"Папка '{DATA_DIR}' не найдена.")
         return pd.DataFrame()
 
-    all_records = []
+    all_dfs = []
     for file in os.listdir(DATA_DIR):
-        if file.endswith("important.xlsx"):
+        if file.endswith(".xlsx"):
             filepath = os.path.join(DATA_DIR, file)
             try:
-                df_sheet = pd.read_excel(filepath, header=None, names=["field", "value"])
-                record = dict(zip(df_sheet["field"], df_sheet["value"]))
-                # Извлечение названия ЖК из имени файла
+                # Читаем как есть: 2 столбца
+                df_raw = pd.read_excel(filepath, header=None, names=["field", "value"])
+                
+                # Удаляем пустые строки
+                df_raw = df_raw.dropna(subset=["field"]).reset_index(drop=True)
+                
+                # Поворачиваем: из строк → в колонки
+                df_wide = df_raw.set_index("field").T  # теперь 1 строка, много колонок
+                
+                # Добавляем имя ЖК
                 name = os.path.splitext(file)[0].replace("ZHK_", "").replace("_important", "").replace("_", " ").title()
-                record["name"] = name
-                record["lat"] = record.get("Ширина")
-                record["lon"] = record.get("Долгота")
-                all_records.append(record)
+                df_wide["name"] = name
+                
+                all_dfs.append(df_wide)
+                
             except Exception as e:
-                st.warning(f"Не удалось прочитать {file}: {e}")
-
-    if not all_records:
+                st.warning(f"Ошибка при чтении {file}: {e}")
+    
+    if not all_dfs:
         return pd.DataFrame()
-    return pd.DataFrame(all_records)
+    
+    # Объединяем все ЖК в одну таблицу
+    df = pd.concat(all_dfs, ignore_index=True)
+    
+    # Приводим координаты к числу
+    for col in ["Ширина", "Долгота"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    
+    return df
 
 df = load_jk_data()
 

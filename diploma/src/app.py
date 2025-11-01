@@ -4,18 +4,11 @@ import folium
 from streamlit_folium import st_folium
 import os
 import numpy as np
+
 # ===========================
 # ЗАГРУЗКА ДАННЫХ ИЗ ПАПКИ
 # ===========================
 
-def clean_numeric(x):
-    if pd.isna(x):
-        return np.nan
-    try:
-        return float(str(x).strip().replace(",", "."))
-    except:
-        return np.nan
-        
 @st.cache_data
 def load_jk_data():
     DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -45,21 +38,14 @@ def load_jk_data():
     
     df = pd.concat(all_dfs, ignore_index=True)
     
-    # Убедимся, что координаты числовые
+    # Приводим координаты к числовому типу
     df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
     df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
-    df = df.dropna(subset=["lat", "lon"])
+    df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)
     
     return df
 
 df = load_jk_data()
-
-st.write("Загруженные данные:")
-st.dataframe(df[["name", "lat", "lon"]])
-st.write("Типы данных:")
-st.write(df[["lat", "lon"]].dtypes)
-st.write("Пример данных:")
-st.dataframe(df[["name", "Ширина", "Долгота"]])
 
 # ===========================
 # ПРОВЕРКА ДАННЫХ
@@ -68,14 +54,6 @@ if df.empty:
     st.title("🏙️ Дашборд жилых комплексов Москвы")
     st.error("Нет данных. Положите Excel-файлы в папку `data/`.")
     st.stop()
-
-# Убедимся, что координаты числовые
-
-
-# Переименуем для удобства
-df = df.rename(columns={"Ширина": "lat", "Долгота": "lon"})
-df = df.dropna(subset=["lat", "lon"])
-
 
 # ===========================
 # СОСТОЯНИЕ ВЫБРАННОГО ЖК
@@ -97,6 +75,12 @@ moscow_center = [55.7522, 37.6156]
 m = folium.Map(location=moscow_center, zoom_start=12, tiles="CartoDB positron")
 
 for _, row in df.iterrows():
+    try:
+        lat = float(row["lat"])
+        lon = float(row["lon"])
+    except (TypeError, ValueError):
+        continue  # пропустить, если координаты некорректны
+
     popup_html = f"""
     <div style="width: 220px;">
         <b>{row['name']}</b><br>
@@ -108,7 +92,7 @@ for _, row in df.iterrows():
     </div>
     """
     folium.Marker(
-        location=[row["lat"], row["lon"]],
+        location=[lat, lon],
         popup=folium.Popup(popup_html, max_width=250),
         tooltip=row["name"]
     ).add_to(m)

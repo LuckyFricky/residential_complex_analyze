@@ -82,15 +82,15 @@ for _, row in df.iterrows():
         continue  # пропустить, если координаты некорректны
 
     popup_html = f"""
-    <div style="width: 220px;">
-        <b>{row['name']}</b><br>
-        <a href="?jk_name={row['name']}" target="_self" style="text-decoration: none;">
-            <button style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px;">
-                Подробнее
-            </button>
-        </a>
-    </div>
-    """
+<div style="width: 220px;">
+    <b>{row['name']}</b><br>
+    <a href="?jk_name={row['name']}" target="_self" style="text-decoration: none;">
+        <button style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px;">
+            Подробнее
+        </button>
+    </a>
+</div>
+"""
     folium.Marker(
         location=[lat, lon],
         popup=folium.Popup(popup_html, max_width=250),

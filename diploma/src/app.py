@@ -46,6 +46,11 @@ def load_jk_data():
 
 df = load_jk_data()
 
+st.write("Загруженные данные:")
+st.dataframe(df[["name", "lat", "lon"]])
+st.write("Типы данных:")
+st.write(df[["lat", "lon"]].dtypes)
+
 # ===========================
 # ПРОВЕРКА ДАННЫХ
 # ===========================

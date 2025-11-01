@@ -102,8 +102,7 @@ st_folium(m, width=900, height=500)
 # ===========================
 # ОБРАБОТКА ВЫБОРА ЧЕРЕЗ URL
 # ===========================
-query_params = st.experimental_get_query_params()
-jk_name = query_params.get("jk_name", [None])[0]
+jk_name = st.query_params.get("jk_name", None)
 
 if jk_name:
     selected_rows = df[df["name"] == jk_name]

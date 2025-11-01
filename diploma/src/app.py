@@ -3,7 +3,7 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import os
-
+import numpy as np
 # ===========================
 # ЗАГРУЗКА ДАННЫХ ИЗ ПАПКИ
 # ===========================

@@ -75,9 +75,12 @@ if df.empty:
     st.stop()
 
 # Убедимся, что координаты числовые
-df["lat"] = df["lat"].apply(clean_numeric)
-df["lon"] = df["lon"].apply(clean_numeric)
+
+
+# Переименуем для удобства
+df = df.rename(columns={"Ширина": "lat", "Долгота": "lon"})
 df = df.dropna(subset=["lat", "lon"])
+
 
 # ===========================
 # СОСТОЯНИЕ ВЫБРАННОГО ЖК

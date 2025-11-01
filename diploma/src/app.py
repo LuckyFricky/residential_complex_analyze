@@ -4,7 +4,8 @@ import folium
 from streamlit_folium import st_folium
 import os
 import numpy as np
-
+st.cache_data.clear()
+st.cache_resource.clear()
 # ===========================
 # ЗАГРУЗКА ДАННЫХ ИЗ ПАПКИ
 # ===========================

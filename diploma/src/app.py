@@ -10,7 +10,7 @@ import os
 @st.cache_data
 def load_jk_data():
     # Путь к папке с данными
-    DATA_DIR = "data"
+    DATA_DIR = "../data"
     if not os.path.exists(DATA_DIR):
         st.error(f"Папка '{DATA_DIR}' не найдена. Создайте её и положите туда .xlsx файлы.")
         return pd.DataFrame()

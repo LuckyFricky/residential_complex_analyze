@@ -7,6 +7,15 @@ import os
 # ===========================
 # ЗАГРУЗКА ДАННЫХ ИЗ ПАПКИ
 # ===========================
+
+def clean_numeric(x):
+    if pd.isna(x):
+        return np.nan
+    try:
+        return float(str(x).strip().replace(",", "."))
+    except:
+        return np.nan
+        
 @st.cache_data
 def load_jk_data():
     # Путь к папке с данными
@@ -46,8 +55,8 @@ if df.empty:
     st.stop()
 
 # Убедимся, что координаты числовые
-df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
-df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
+df["lat"] = df["lat"].apply(clean_numeric)
+df["lon"] = df["lon"].apply(clean_numeric)
 df = df.dropna(subset=["lat", "lon"])
 
 # ===========================
@@ -67,7 +76,7 @@ st.markdown("Кликните по метке на карте, чтобы уви
 # КАРТА
 # ===========================
 moscow_center = [55.7522, 37.6156]
-m = folium.Map(location=moscow_center, zoom_start=10, tiles="CartoDB positron")
+m = folium.Map(location=moscow_center, zoom_start=12, tiles="CartoDB positron")
 
 for _, row in df.iterrows():
     popup_html = f"""

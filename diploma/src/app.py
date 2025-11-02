@@ -73,13 +73,14 @@ moscow_center = [55.7522, 37.6156]
 m = folium.Map(location=moscow_center, zoom_start=11, tiles="CartoDB positron")
 
 for _, row in df.iterrows():
+    jk_name_encoded = row['name'].replace(' ', '%20')
     popup_html = f"""
     <div style="width: 220px;">
-        <b>{row['name']}</b><br>
-        <button onclick="window.parent.location.search='?jk_name={row['name'].replace(' ', '%20')}'"
-                style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px; cursor: pointer;">
+        <b>{row['name']}</b><br><br>
+        <a href="?jk_name={jk_name_encoded}" target="_top" 
+           style="text-decoration: none; display: inline-block; padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">
             Подробнее
-        </button>
+        </a>
     </div>
     """
     folium.Marker(

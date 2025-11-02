@@ -22,8 +22,14 @@ def load_jk_data():
         if file.endswith(".xlsx"):
             filepath = os.path.join(DATA_DIR, file)
             try:
-                # Читаем как обычную таблицу с заголовками
                 df_one = pd.read_excel(filepath)
+                
+                # === НОРМАЛИЗАЦИЯ НАЗВАНИЙ КОЛОНОК ===
+                # Убираем пробелы по краям и приводим к строке
+                df_one.columns = df_one.columns.astype(str).str.strip()
+                
+                # Удаляем полностью пустые колонки
+                df_one = df_one.dropna(axis=1, how="all")
                 
                 # Добавляем имя ЖК
                 name = os.path.splitext(file)[0].replace("ZHK_", "").replace("_important", "").replace("_", " ").title()
@@ -37,9 +43,10 @@ def load_jk_data():
     if not all_dfs:
         return pd.DataFrame()
     
-    df = pd.concat(all_dfs, ignore_index=True)
+    # Объединяем с выравниванием по колонкам
+    df = pd.concat(all_dfs, ignore_index=True, sort=False)
     
-    # Приводим координаты к числовому типу
+    # Приводим координаты к числу
     df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
     df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
     df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)

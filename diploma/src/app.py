@@ -3,67 +3,45 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import os
-import numpy as np
-st.cache_data.clear()
-st.cache_resource.clear()
-# ===========================
-# ЗАГРУЗКА ДАННЫХ ИЗ ПАПКИ
-# ===========================
 
+# ===========================
+# ЗАГРУЗКА ДАННЫХ ИЗ ОДНОГО ФАЙЛА
+# ===========================
 @st.cache_data
 def load_jk_data():
-    DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-    if not os.path.exists(DATA_DIR):
-        st.error(f"Папка '{DATA_DIR}' не найдена.")
+    DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "ZHK_statistics.xlsx")
+    if not os.path.exists(DATA_FILE):
+        st.error(f"Файл '{DATA_FILE}' не найден.")
         return pd.DataFrame()
 
-    all_dfs = []
-    for file in os.listdir(DATA_DIR):
-        if file.endswith(".xlsx"):
-            filepath = os.path.join(DATA_DIR, file)
-            try:
-                df_one = pd.read_excel(filepath)
-                
-                # === НОРМАЛИЗАЦИЯ НАЗВАНИЙ КОЛОНОК ===
-                # Убираем пробелы по краям и приводим к строке
-                df_one.columns = df_one.columns.astype(str).str.strip()
-                
-                # Удаляем полностью пустые колонки
-                df_one = df_one.dropna(axis=1, how="all")
-                
-                # Добавляем имя ЖК
-                name = os.path.splitext(file)[0].replace("ZHK_", "").replace("_important", "").replace("_", " ").title()
-                df_one["name"] = name
-                
-                all_dfs.append(df_one)
-                
-            except Exception as e:
-                st.warning(f"Ошибка при чтении {file}: {e}")
+    try:
+        df = pd.read_excel(DATA_FILE)
+        
+        # Убедимся, что есть обязательные колонки
+        required_cols = ["Название ЖК", "Ширина", "Долгота"]
+        if not all(col in df.columns for col in required_cols):
+            st.error(f"В файле отсутствуют обязательные колонки: {required_cols}")
+            return pd.DataFrame()
+        
+        # Приведём координаты к числу
+        df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
+        df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
+        df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)
+        
+        return df
     
-    if not all_dfs:
+    except Exception as e:
+        st.error(f"Ошибка при чтении файла: {e}")
         return pd.DataFrame()
-    
-    # Объединяем с выравниванием по колонкам
-    df = pd.concat(all_dfs, ignore_index=True, sort=False)
-    
-    # Приводим координаты к числу
-    df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
-    df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
-    df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)
-    
-    return df
 
 df = load_jk_data()
-
-st.subheader("🔍 Отладка: полный датафрейм")
-st.dataframe(df)
 
 # ===========================
 # ПРОВЕРКА ДАННЫХ
 # ===========================
 if df.empty:
     st.title("🏙️ Дашборд жилых комплексов Москвы")
-    st.error("Нет данных. Положите Excel-файлы в папку `data/`.")
+    st.error("Нет данных. Проверьте файл `ZHK_statistics.xlsx` в папке `data/`.")
     st.stop()
 
 # ===========================
@@ -83,28 +61,22 @@ st.markdown("Кликните по метке на карте, чтобы уви
 # КАРТА
 # ===========================
 moscow_center = [55.7522, 37.6156]
-m = folium.Map(location=moscow_center, zoom_start=12, tiles="CartoDB positron")
+m = folium.Map(location=moscow_center, zoom_start=11, tiles="CartoDB positron")
 
 for _, row in df.iterrows():
-    try:
-        lat = float(row["lat"])
-        lon = float(row["lon"])
-    except (TypeError, ValueError):
-        continue  # пропустить, если координаты некорректны
-
     popup_html = f"""
-<div style="width: 220px;">
-    <b>{row['name']}</b><br>
-    <button onclick="window.parent.location.search='?jk_name={row['name'].replace(' ', '%20')}'"
-            style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px; cursor: pointer;">
-        Подробнее
-    </button>
-</div>
-"""
+    <div style="width: 220px;">
+        <b>{row['Название ЖК']}</b><br>
+        <button onclick="window.parent.location.search='?jk_name={row['Название ЖК'].replace(' ', '%20')}'"
+                style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px; cursor: pointer;">
+            Подробнее
+        </button>
+    </div>
+    """
     folium.Marker(
-        location=[lat, lon],
+        location=[float(row["lat"]), float(row["lon"])],
         popup=folium.Popup(popup_html, max_width=250),
-        tooltip=row["name"]
+        tooltip=row["Название ЖК"]
     ).add_to(m)
 
 st_folium(m, width=900, height=500)
@@ -115,11 +87,12 @@ st_folium(m, width=900, height=500)
 jk_name = st.query_params.get("jk_name", None)
 
 if jk_name:
-    selected_rows = df[df["name"] == jk_name]
+    selected_rows = df[df["Название ЖК"] == jk_name]
     if not selected_rows.empty:
         st.session_state.selected_jk = selected_rows.iloc[0].to_dict()
 else:
     st.session_state.selected_jk = None
+
 # ===========================
 # ДЕТАЛИ
 # ===========================
@@ -127,8 +100,9 @@ st.subheader("Подробная информация")
 
 if st.session_state.selected_jk:
     jk = st.session_state.selected_jk
+    name = jk["Название ЖК"]
     
-    st.markdown(f"### 🏢 {jk['name']}")
+    st.markdown(f"### 🏢 {name}")
     
     # Основные метрики
     col1, col2, col3 = st.columns(3)

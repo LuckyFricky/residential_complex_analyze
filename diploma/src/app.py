@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 import os
 
 # ===========================
-# ЗАГРУЗКА ДАННЫХ ИЗ ОДНОГО ФАЙЛА
+# ЗАГРУЗКА ДАННЫХ
 # ===========================
 @st.cache_data
 def load_jk_data():
@@ -17,18 +17,19 @@ def load_jk_data():
     try:
         df = pd.read_excel(DATA_FILE)
         
-        # Нормализация: убрать пробелы по краям у названий ЖК
-        if "Название ЖК" in df.columns:
-            df["Название ЖК"] = df["Название ЖК"].astype(str).str.strip()
-        
-        required_cols = ["Название ЖК", "Ширина", "Долгота"]
-        if not all(col in df.columns for col in required_cols):
-            st.error(f"В файле отсутствуют обязательные колонки: {required_cols}")
+        # Убедимся, что обязательные колонки есть
+        required = ["name", "latitude", "longitude"]
+        if not all(col in df.columns for col in required):
+            st.error(f"Отсутствуют обязательные колонки: {required}")
             return pd.DataFrame()
         
-        df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
-        df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
-        df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)
+        # Приведём координаты к числу (на всякий случай)
+        df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
+        df = df.dropna(subset=["latitude", "longitude"]).reset_index(drop=True)
+        
+        # Убедимся, что названия ЖК — строки без лишних пробелов
+        df["name"] = df["name"].astype(str).str.strip()
         
         return df
     
@@ -36,9 +37,12 @@ def load_jk_data():
         st.error(f"Ошибка при чтении файла: {e}")
         return pd.DataFrame()
 
+# Загрузка данных
 df = load_jk_data()
-st.subheader("🔍 Отладка: полный датафрейм")
-st.dataframe(df)
+
+# Отладка (можно удалить позже)
+# st.dataframe(df)
+
 # ===========================
 # ПРОВЕРКА ДАННЫХ
 # ===========================
@@ -48,7 +52,7 @@ if df.empty:
     st.stop()
 
 # ===========================
-# СОСТОЯНИЕ ВЫБРАННОГО ЖК
+# СОСТОЯНИЕ
 # ===========================
 if "selected_jk" not in st.session_state:
     st.session_state.selected_jk = None
@@ -69,17 +73,17 @@ m = folium.Map(location=moscow_center, zoom_start=11, tiles="CartoDB positron")
 for _, row in df.iterrows():
     popup_html = f"""
     <div style="width: 220px;">
-        <b>{row['Название ЖК']}</b><br>
-        <button onclick="window.parent.location.search='?jk_name={row['Название ЖК'].replace(' ', '%20')}'"
+        <b>{row['name']}</b><br>
+        <button onclick="window.parent.location.search='?jk_name={row['name'].replace(' ', '%20')}'"
                 style="padding: 6px 10px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; margin-top: 8px; cursor: pointer;">
             Подробнее
         </button>
     </div>
     """
     folium.Marker(
-        location=[float(row["lat"]), float(row["lon"])],
+        location=[float(row["latitude"]), float(row["longitude"])],
         popup=folium.Popup(popup_html, max_width=250),
-        tooltip=row["Название ЖК"]
+        tooltip=row["name"]
     ).add_to(m)
 
 st_folium(m, width=900, height=500)
@@ -90,7 +94,8 @@ st_folium(m, width=900, height=500)
 jk_name = st.query_params.get("jk_name", None)
 
 if jk_name:
-    selected_rows = df[df["Название ЖК"] == jk_name]
+    # Точное совпадение (с учётом нормализации)
+    selected_rows = df[df["name"] == jk_name]
     if not selected_rows.empty:
         st.session_state.selected_jk = selected_rows.iloc[0].to_dict()
 else:
@@ -103,44 +108,41 @@ st.subheader("Подробная информация")
 
 if st.session_state.selected_jk:
     jk = st.session_state.selected_jk
-    name = jk["Название ЖК"]
+    st.markdown(f"### 🏢 {jk['name']}")
     
-    st.markdown(f"### 🏢 {name}")
-    
-    # Основные метрики
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("Квартиры всего", int(jk.get("Количество жилых помещений", 0)))
-        st.metric("Студии", int(jk.get("Количество студий", 0)))
-        st.metric("1-комн.", int(jk.get("Количество однокомнатных квартир", 0)))
+        st.metric("Квартиры всего", int(jk.get("all_amount", 0)))
+        st.metric("Студии", int(jk.get("studio_amount", 0)))
+        st.metric("1-комн.", int(jk.get("1_room_amount", 0)))
     with col2:
-        st.metric("2-комн.", int(jk.get("Количество двухкомнатных квартир", 0)))
-        st.metric("3-комн.", int(jk.get("Количество трехкомнатных квартир", 0)))
-        st.metric("4+ комнат", int(jk.get("Количество 4 и 4+ комнатных квартир", 0)))
+        st.metric("2-комн.", int(jk.get("2_room_amount", 0)))
+        st.metric("3-комн.", int(jk.get("3_room_amount", 0)))
+        st.metric("4+ комнат", int(jk.get("4+_room_amount", 0)))
     with col3:
-        st.metric("Лифтов", int(jk.get("Количество лифтов", 0)))
-        st.metric("Подъездов", int(jk.get("Количество подъездов", 0)))
-        st.metric("Машиномест (паркинг)", int(jk.get("Количество машино-мест в паркинге", 0)))
+        st.metric("Лифтов", int(jk.get("elevators_amount", 0)))
+        st.metric("Подъездов", int(jk.get("entrances_amount", 0)))
+        st.metric("Машиномест (паркинг)", int(jk.get("places_for_cars_in_parking", 0)))
 
     st.markdown("---")
     st.markdown("#### 📊 Инфраструктура и доступность")
     infra_col1, infra_col2 = st.columns(2)
     with infra_col1:
-        st.write(f"- Детских площадок: {int(jk.get('Количество детских площадок', 0))}")
-        st.write(f"- Спортивных площадок: {int(jk.get('Количество спортивных площадок', 0))}")
-        st.write(f"- Велодорожки: {'Да' if jk.get('Наличие велосипедных дорожек') else 'Нет'}")
-        st.write(f"- Тротуары: {'Да' if jk.get('Наличие тротуаров') else 'Нет'}")
+        st.write(f"- Детских площадок: {int(jk.get('children_playing_zone_amount', 0))}")
+        st.write(f"- Спортивных площадок: {int(jk.get('sports_amount', 0))}")
+        st.write(f"- Велодорожки: {'Да' if jk.get('bicycle_is') else 'Нет'}")
+        st.write(f"- Тротуары: {'Да' if jk.get('sidewalk_amount') else 'Нет'}")
     with infra_col2:
-        st.write(f"- Пандус: {'Да' if jk.get('Наличие пандуса') else 'Нет'}")
-        st.write(f"- Инвалидных подъёмников: {int(jk.get('Количество инвалидных подъемников', 0))}")
-        st.write(f"- Понижающие бордюры: {'Да' if jk.get('Наличие понижающих площадок') else 'Нет'}")
-        st.write(f"- Обеспеченность машиноместами: {jk.get('Обеспеченность машиноместами', '—')}")
+        st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
+        st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
+        st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
+        st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—')}")
 
     st.markdown("---")
     st.markdown("#### 📐 Архитектурные параметры")
-    st.write(f"- Мин. высота потолков: {jk.get('Минимальная высота потолков', '—')} м")
-    st.write(f"- Макс. высота потолков: {jk.get('Максимальная высота потолков', '—')} м")
-    st.write(f"- Этажность: {int(jk.get('Минимальное количество этажей', 0))}–{int(jk.get('Максимальное количество этажей', 0))}")
-    st.write(f"- Средняя общая площадь квартиры: {jk.get('Средняя общая площадь, м2', '—')} м²")
+    st.write(f"- Мин. высота потолков: {jk.get('min_ceiling_height', '—')} м")
+    st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
+    st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
+    st.write(f"- Средняя общая площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
 else:
     st.info("Выберите ЖК на карте для просмотра деталей.")

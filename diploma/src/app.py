@@ -7,7 +7,7 @@ import os
 # ===========================
 # ЗАГРУЗКА ДАННЫХ
 # ===========================
-@st.cache_data
+#@st.cache_data
 def load_jk_data():
     DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "ZHK_statistics.xlsx")
     if not os.path.exists(DATA_FILE):

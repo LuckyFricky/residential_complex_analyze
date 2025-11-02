@@ -51,8 +51,8 @@ def load_infrastructure():
         # Приведём к нужным типам
         df["JK_name"] = df["JK_name"].astype(str).str.strip()
         df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-        df["longtitude"] = pd.to_numeric(df["longtitude"], errors="coerce")  # да, в файле "longtitude"
-        df = df.dropna(subset=["latitude", "longtitude"])
+        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")  
+        df = df.dropna(subset=["latitude", "longitude"])
         
         # Переименуем колонку для совместимости
         df = df.rename(columns={"JK_name": "jk_name", "longtitude": "longitude"})
@@ -65,7 +65,7 @@ def load_infrastructure():
 
 df_jk = load_jk_data()
 df_infra = load_infrastructure()
-
+st.write("DEBUG: Данные инфраструктуры", df_infra)  # <--- временная строка
 # ===========================
 # ПРОВЕРКА ДАННЫХ
 # ===========================
@@ -108,7 +108,7 @@ folium.Marker(
 
 # Фильтруем инфраструктуру для выбранного ЖК
 infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
-
+st.write("DEBUG: Инфраструктура для выбранного ЖК", infra_for_jk)  # <--- временная строка
 # Добавляем инфраструктуру
 for _, row in infra_for_jk.iterrows():
     # Определяем цвет иконки по типу

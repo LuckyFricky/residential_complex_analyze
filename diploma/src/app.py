@@ -37,12 +37,39 @@ def load_jk_data():
         st.error(f"Ошибка при чтении файла: {e}")
         return pd.DataFrame()
 
-df = load_jk_data()
+# Загрузка инфраструктуры
+@st.cache_data
+def load_infrastructure():
+    INFRA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "infrastructure.xlsx")
+    if not os.path.exists(INFRA_FILE):
+        st.error(f"Файл '{INFRA_FILE}' не найден.")
+        return pd.DataFrame()
+
+    try:
+        df = pd.read_excel(INFRA_FILE)
+        
+        # Приведём к нужным типам
+        df["JK_name"] = df["JK_name"].astype(str).str.strip()
+        df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
+        df["longtitude"] = pd.to_numeric(df["longtitude"], errors="coerce")  # да, в файле "longtitude"
+        df = df.dropna(subset=["latitude", "longtitude"])
+        
+        # Переименуем колонку для совместимости
+        df = df.rename(columns={"JK_name": "jk_name", "longtitude": "longitude"})
+        
+        return df
+    
+    except Exception as e:
+        st.error(f"Ошибка при чтении файла инфраструктуры: {e}")
+        return pd.DataFrame()
+
+df_jk = load_jk_data()
+df_infra = load_infrastructure()
 
 # ===========================
 # ПРОВЕРКА ДАННЫХ
 # ===========================
-if df.empty:
+if df_jk.empty:
     st.title("🏙️ Дашборд жилых комплексов Москвы")
     st.error("Нет данных. Проверьте файл `ZHK_statistics.xlsx` в папке `data/`.")
     st.stop()
@@ -51,7 +78,7 @@ if df.empty:
 # СОСТОЯНИЕ ВЫБРАННОГО ЖК
 # ===========================
 if "selected_jk_name" not in st.session_state:
-    st.session_state.selected_jk_name = df.iloc[0]["name"] if not df.empty else None
+    st.session_state.selected_jk_name = df_jk.iloc[0]["name"] if not df_jk.empty else None
 
 # ===========================
 # ИНТЕРФЕЙС
@@ -64,29 +91,49 @@ st.markdown("Кликните по метке на карте, чтобы уви
 # КАРТА
 # ===========================
 # Центрируем карту на выбранном ЖК
-selected_row = df[df["name"] == st.session_state.selected_jk_name].iloc[0]
+selected_row = df_jk[df_jk["name"] == st.session_state.selected_jk_name].iloc[0]
 m = folium.Map(
     location=[selected_row["latitude"], selected_row["longitude"]],
-    zoom_start=12,
+    zoom_start=14,
     tiles="CartoDB positron"
 )
 
-for _, row in df.iterrows():
+# Маркер выбранного ЖК (красный)
+folium.Marker(
+    location=[selected_row["latitude"], selected_row["longitude"]],
+    popup=selected_row["name"],
+    tooltip=selected_row["name"],
+    icon=folium.Icon(color="red", popupAnchor=(0, -10))
+).add_to(m)
+
+# Фильтруем инфраструктуру для выбранного ЖК
+infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
+
+# Добавляем инфраструктуру
+for _, row in infra_for_jk.iterrows():
+    # Определяем цвет иконки по типу
+    icon_color = {
+        "school": "blue",
+        "kindergarten": "orange",
+        "park": "green",
+        "metro": "purple",
+        "shop": "darkred",
+        "hospital": "cadetblue"
+    }.get(row["type"], "gray")
+
     folium.Marker(
-        location=[float(row["latitude"]), float(row["longitude"])],
-        popup=row["name"],
+        location=[row["latitude"], row["longitude"]],
+        popup=f"{row['name']} ({row['type']})",
         tooltip=row["name"],
-        icon=folium.Icon(
-            color="red" if row["name"] == st.session_state.selected_jk_name else "blue"
-        )
+        icon=folium.Icon(color=icon_color, popupAnchor=(0, -10))
     ).add_to(m)
 
-# Отображаем карту и получаем возвращаемые объекты
+# Отображаем карту
 map_data = st_folium(
     m,
     width=900,
     height=500,
-    returned_objects=["last_object_clicked_popup"]  # Получаем текст из попапа (имя ЖК)
+    returned_objects=["last_object_clicked_popup"]
 )
 
 # ===========================
@@ -94,18 +141,18 @@ map_data = st_folium(
 # ===========================
 if map_data and map_data.get("last_object_clicked_popup"):
     clicked_name = map_data["last_object_clicked_popup"]
-    if clicked_name in df["name"].values:
+    if clicked_name in df_jk["name"].values:
         if clicked_name != st.session_state.selected_jk_name:
             st.session_state.selected_jk_name = clicked_name
             st.rerun()  # Принудительно перезапускаем, чтобы обновить карту и панель
 
 # ===========================
-# ДЕТАЛИ
+# ДЕТАЛИ ЖК + ИНФРАСТРУКТУРА
 # ===========================
 st.subheader("Подробная информация")
 
 if st.session_state.selected_jk_name:
-    jk = df[df["name"] == st.session_state.selected_jk_name].iloc[0].to_dict()
+    jk = df_jk[df_jk["name"] == st.session_state.selected_jk_name].iloc[0].to_dict()
     st.markdown(f"### 🏢 {jk['name']}")
 
     col1, col2, col3 = st.columns(3)
@@ -142,5 +189,18 @@ if st.session_state.selected_jk_name:
     st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
     st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
     st.write(f"- Средняя общая площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
+
+    # ===========================
+    # ИНФРАСТРУКТУРА РЯДОМ
+    # ===========================
+    st.markdown("---")
+    st.subheader("📍 Инфраструктура рядом")
+
+    if not infra_for_jk.empty:
+        for _, infra in infra_for_jk.iterrows():
+            st.write(f"- **{infra['name']}** ({infra['type']}) — {infra.get('distance m', '—')} м")
+    else:
+        st.write("Инфраструктура не найдена.")
+
 else:
     st.info("Выберите ЖК на карте для просмотра деталей.")

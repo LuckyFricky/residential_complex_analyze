@@ -23,7 +23,7 @@ def load_jk_data():
             st.error(f"Отсутствуют обязательные колонки: {required}")
             return pd.DataFrame()
         
-        # Приведём координаты к числу (на всякий случай)
+        # Приведём координаты к числу (на всякий случае)
         df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
         df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
         df = df.dropna(subset=["latitude", "longitude"]).reset_index(drop=True)
@@ -50,7 +50,7 @@ def load_infrastructure():  # УБРАЛИ @st.cache_data
         # Приведём к нужным типам
         df["JK_name"] = df["JK_name"].astype(str).str.strip()
         df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")  # УБРАЛИ ОШИБКУ
+        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
         df = df.dropna(subset=["latitude", "longitude"])
         
         # Переименуем колонку для совместимости
@@ -103,17 +103,22 @@ st.markdown("Кликните по метке на карте, чтобы уви
 selected_row = df_jk[df_jk["name"] == st.session_state.selected_jk_name].iloc[0]
 m = folium.Map(
     location=[selected_row["latitude"], selected_row["longitude"]],
-    zoom_start=14,
+    zoom_start=12,  # Уменьшили зум, чтобы видеть все ЖК
     tiles="CartoDB positron"
 )
 
-# Маркер выбранного ЖК (красный)
-folium.Marker(
-    location=[selected_row["latitude"], selected_row["longitude"]],
-    popup=selected_row["name"],
-    tooltip=selected_row["name"],
-    icon=folium.Icon(color="red", popupAnchor=(0, -10))
-).add_to(m)
+# Добавляем маркеры для ВСЕХ ЖК
+for _, row in df_jk.iterrows():
+    folium.Marker(
+        location=[row["latitude"], row["longitude"]],
+        popup=row["name"],
+        tooltip=row["name"],
+        icon=folium.Icon(
+            color="red" if row["name"] == st.session_state.selected_jk_name else "lightblue",
+            icon="home",
+            prefix="fa"
+        )
+    ).add_to(m)
 
 # Фильтруем инфраструктуру для выбранного ЖК
 infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]

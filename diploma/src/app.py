@@ -95,7 +95,9 @@ map_data = st_folium(
 if map_data and map_data.get("last_object_clicked_popup"):
     clicked_name = map_data["last_object_clicked_popup"]
     if clicked_name in df["name"].values:
-        st.session_state.selected_jk_name = clicked_name
+        if clicked_name != st.session_state.selected_jk_name:
+            st.session_state.selected_jk_name = clicked_name
+            st.rerun()  # Принудительно перезапускаем, чтобы обновить карту и панель
 
 # ===========================
 # ДЕТАЛИ

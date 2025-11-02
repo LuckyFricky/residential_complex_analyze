@@ -77,15 +77,20 @@ if df_jk.empty:
 # ===========================
 # СОСТОЯНИЕ ВЫБРАННОГО ЖК
 # ===========================
-if "selected_jk_name" not in st.session_state:
-    st.session_state.selected_jk_name = df_jk.iloc[0]["name"] if not df_jk.empty else None
+# Загрузка начального ЖК из URL или выбор первого по умолчанию
+jk_name_from_url = st.query_params.get("jk_name", None)
 
-# ===========================
-# ИНТЕРФЕЙС
-# ===========================
-st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
-st.title("🏙️ Дашборд жилых комплексов Москвы")
-st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")
+if "selected_jk_name" not in st.session_state:
+    # Если состояние пустое (первый запуск), используем URL или первый ЖК
+    if jk_name_from_url and jk_name_from_url in df_jk["name"].values:
+        st.session_state.selected_jk_name = jk_name_from_url
+    else:
+        st.session_state.selected_jk_name = df_jk.iloc[0]["name"] if not df_jk.empty else None
+
+# Если URL изменился (пользователь кликнул), обновляем состояние
+if jk_name_from_url and jk_name_from_url != st.session_state.selected_jk_name:
+    if jk_name_from_url in df_jk["name"].values:
+        st.session_state.selected_jk_name = jk_name_from_url
 
 # ===========================
 # КАРТА
@@ -108,7 +113,7 @@ folium.Marker(
 
 # Фильтруем инфраструктуру для выбранного ЖК
 infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
-st.write("DEBUG: Инфраструктура для выбранного ЖК", infra_for_jk)  # <--- временная строка
+
 # Добавляем инфраструктуру
 for _, row in infra_for_jk.iterrows():
     # Определяем цвет иконки по типу
@@ -144,6 +149,7 @@ if map_data and map_data.get("last_object_clicked_popup"):
     if clicked_name in df_jk["name"].values:
         if clicked_name != st.session_state.selected_jk_name:
             st.session_state.selected_jk_name = clicked_name
+            st.query_params.jk_name = clicked_name  # Обновляем URL
             st.rerun()  # Принудительно перезапускаем, чтобы обновить карту и панель
 
 # ===========================

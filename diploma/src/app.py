@@ -7,7 +7,7 @@ import os
 # ===========================
 # ЗАГРУЗКА ДАННЫХ
 # ===========================
-#@st.cache_data
+@st.cache_data
 def load_jk_data():
     DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "ZHK_statistics.xlsx")
     if not os.path.exists(DATA_FILE):
@@ -38,8 +38,7 @@ def load_jk_data():
         return pd.DataFrame()
 
 # Загрузка инфраструктуры
-@st.cache_data
-def load_infrastructure():
+def load_infrastructure():  # УБРАЛИ @st.cache_data
     INFRA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "infrastructure.xlsx")
     if not os.path.exists(INFRA_FILE):
         st.error(f"Файл '{INFRA_FILE}' не найден.")
@@ -51,7 +50,7 @@ def load_infrastructure():
         # Приведём к нужным типам
         df["JK_name"] = df["JK_name"].astype(str).str.strip()
         df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")  
+        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")  # УБРАЛИ ОШИБКУ
         df = df.dropna(subset=["latitude", "longitude"])
         
         # Переименуем колонку для совместимости
@@ -65,7 +64,7 @@ def load_infrastructure():
 
 df_jk = load_jk_data()
 df_infra = load_infrastructure()
-st.write("DEBUG: Данные инфраструктуры", df_infra)  # <--- временная строка
+
 # ===========================
 # ПРОВЕРКА ДАННЫХ
 # ===========================
@@ -75,22 +74,27 @@ if df_jk.empty:
     st.stop()
 
 # ===========================
-# СОСТОЯНИЕ ВЫБРАННОГО ЖК
+# СИНХРОНИЗАЦИЯ СОСТОЯНИЯ С URL
 # ===========================
-# Загрузка начального ЖК из URL или выбор первого по умолчанию
 jk_name_from_url = st.query_params.get("jk_name", None)
 
-if "selected_jk_name" not in st.session_state:
-    # Если состояние пустое (первый запуск), используем URL или первый ЖК
-    if jk_name_from_url and jk_name_from_url in df_jk["name"].values:
-        st.session_state.selected_jk_name = jk_name_from_url
-    else:
-        st.session_state.selected_jk_name = df_jk.iloc[0]["name"] if not df_jk.empty else None
+# Если в URL есть jk_name и оно существует в данных
+if jk_name_from_url and jk_name_from_url in df_jk["name"].values:
+    st.session_state.selected_jk_name = jk_name_from_url
+# Если в URL нет, но в session_state есть, используем его
+elif "selected_jk_name" not in st.session_state or st.session_state.selected_jk_name not in df_jk["name"].values:
+    # Иначе — первый ЖК
+    st.session_state.selected_jk_name = df_jk.iloc[0]["name"] if not df_jk.empty else None
+else:
+    # Оставляем текущее состояние
+    pass
 
-# Если URL изменился (пользователь кликнул), обновляем состояние
-if jk_name_from_url and jk_name_from_url != st.session_state.selected_jk_name:
-    if jk_name_from_url in df_jk["name"].values:
-        st.session_state.selected_jk_name = jk_name_from_url
+# ===========================
+# ИНТЕРФЕЙС
+# ===========================
+st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
+st.title("🏙️ Дашборд жилых комплексов Москвы")
+st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")
 
 # ===========================
 # КАРТА
@@ -150,7 +154,7 @@ if map_data and map_data.get("last_object_clicked_popup"):
         if clicked_name != st.session_state.selected_jk_name:
             st.session_state.selected_jk_name = clicked_name
             st.query_params.jk_name = clicked_name  # Обновляем URL
-            st.rerun()  # Принудительно перезапускаем, чтобы обновить карту и панель
+            st.rerun()  # Принудительно перезапускаем
 
 # ===========================
 # ДЕТАЛИ ЖК + ИНФРАСТРУКТУРА

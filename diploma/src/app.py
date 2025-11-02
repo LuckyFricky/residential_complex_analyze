@@ -48,28 +48,26 @@ if df.empty:
     st.stop()
 
 # ===========================
-# ВЫБОР ЖК ЧЕРЕЗ ВИДЖЕТ (надёжный способ)
+# СОСТОЯНИЕ ВЫБРАННОГО ЖК
 # ===========================
-st.subheader("Выберите ЖК")
-jk_names = df["name"].tolist()
-selected_name = st.selectbox("Жилой комплекс", options=jk_names)
-
-# Найдём данные выбранного ЖК
-selected_row = df[df["name"] == selected_name].iloc[0]
+if "selected_jk_name" not in st.session_state:
+    st.session_state.selected_jk_name = df.iloc[0]["name"] if not df.empty else None
 
 # ===========================
 # ИНТЕРФЕЙС
 # ===========================
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
-st.markdown("Выберите ЖК из списка или посмотрите на карте.")
+st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")
 
 # ===========================
-# КАРТА (с фокусом на выбранный ЖК)
+# КАРТА
 # ===========================
+# Центрируем карту на выбранном ЖК
+selected_row = df[df["name"] == st.session_state.selected_jk_name].iloc[0]
 m = folium.Map(
     location=[selected_row["latitude"], selected_row["longitude"]],
-    zoom_start=13,
+    zoom_start=12,
     tiles="CartoDB positron"
 )
 
@@ -79,51 +77,68 @@ for _, row in df.iterrows():
         popup=row["name"],
         tooltip=row["name"],
         icon=folium.Icon(
-            color="red" if row["name"] == selected_name else "blue"
+            color="red" if row["name"] == st.session_state.selected_jk_name else "blue"
         )
     ).add_to(m)
 
-st_folium(m, width=900, height=500)
+# Отображаем карту и получаем возвращаемые объекты
+map_data = st_folium(
+    m,
+    width=900,
+    height=500,
+    returned_objects=["last_object_clicked_popup"]  # Получаем текст из попапа (имя ЖК)
+)
+
+# ===========================
+# ОБНОВЛЕНИЕ ВЫБОРА ПО КЛИКУ НА КАРТЕ
+# ===========================
+if map_data and map_data.get("last_object_clicked_popup"):
+    clicked_name = map_data["last_object_clicked_popup"]
+    if clicked_name in df["name"].values:
+        st.session_state.selected_jk_name = clicked_name
 
 # ===========================
 # ДЕТАЛИ
 # ===========================
 st.subheader("Подробная информация")
 
-jk = selected_row.to_dict()
-st.markdown(f"### 🏢 {jk['name']}")
+if st.session_state.selected_jk_name:
+    jk = df[df["name"] == st.session_state.selected_jk_name].iloc[0].to_dict()
+    st.markdown(f"### 🏢 {jk['name']}")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Квартиры всего", int(jk.get("all_amount", 0)))
-    st.metric("Студии", int(jk.get("studio_amount", 0)))
-    st.metric("1-комн.", int(jk.get("1_room_amount", 0)))
-with col2:
-    st.metric("2-комн.", int(jk.get("2_room_amount", 0)))
-    st.metric("3-комн.", int(jk.get("3_room_amount", 0)))
-    st.metric("4+ комнат", int(jk.get("4+_room_amount", 0)))
-with col3:
-    st.metric("Лифтов", int(jk.get("elevators_amount", 0)))
-    st.metric("Подъездов", int(jk.get("entrances_amount", 0)))
-    st.metric("Машиномест (паркинг)", int(jk.get("places_for_cars_in_parking", 0)))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Квартиры всего", int(jk.get("all_amount", 0)))
+        st.metric("Студии", int(jk.get("studio_amount", 0)))
+        st.metric("1-комн.", int(jk.get("1_room_amount", 0)))
+    with col2:
+        st.metric("2-комн.", int(jk.get("2_room_amount", 0)))
+        st.metric("3-комн.", int(jk.get("3_room_amount", 0)))
+        st.metric("4+ комнат", int(jk.get("4+_room_amount", 0)))
+    with col3:
+        st.metric("Лифтов", int(jk.get("elevators_amount", 0)))
+        st.metric("Подъездов", int(jk.get("entrances_amount", 0)))
+        st.metric("Машиномест (паркинг)", int(jk.get("places_for_cars_in_parking", 0)))
 
-st.markdown("---")
-st.markdown("#### 📊 Инфраструктура и доступность")
-infra_col1, infra_col2 = st.columns(2)
-with infra_col1:
-    st.write(f"- Детских площадок: {int(jk.get('children_playing_zone_amount', 0))}")
-    st.write(f"- Спортивных площадок: {int(jk.get('sports_amount', 0))}")
-    st.write(f"- Велодорожки: {'Да' if jk.get('bicycle_is') else 'Нет'}")
-    st.write(f"- Тротуары: {'Да' if jk.get('sidewalk_amount') else 'Нет'}")
-with infra_col2:
-    st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
-    st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
-    st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
-    st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—')}")
+    st.markdown("---")
+    st.markdown("#### 📊 Инфраструктура и доступность")
+    infra_col1, infra_col2 = st.columns(2)
+    with infra_col1:
+        st.write(f"- Детских площадок: {int(jk.get('children_playing_zone_amount', 0))}")
+        st.write(f"- Спортивных площадок: {int(jk.get('sports_amount', 0))}")
+        st.write(f"- Велодорожки: {'Да' if jk.get('bicycle_is') else 'Нет'}")
+        st.write(f"- Тротуары: {'Да' if jk.get('sidewalk_amount') else 'Нет'}")
+    with infra_col2:
+        st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
+        st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
+        st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
+        st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—')}")
 
-st.markdown("---")
-st.markdown("#### 📐 Архитектурные параметры")
-st.write(f"- Мин. высота потолков: {jk.get('min_ceiling_height', '—')} м")
-st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
-st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
-st.write(f"- Средняя общая площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
+    st.markdown("---")
+    st.markdown("#### 📐 Архитектурные параметры")
+    st.write(f"- Мин. высота потолков: {jk.get('min_ceiling_height', '—')} м")
+    st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
+    st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
+    st.write(f"- Средняя общая площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
+else:
+    st.info("Выберите ЖК на карте для просмотра деталей.")

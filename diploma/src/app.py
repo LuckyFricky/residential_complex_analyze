@@ -17,13 +17,15 @@ def load_jk_data():
     try:
         df = pd.read_excel(DATA_FILE)
         
-        # Убедимся, что есть обязательные колонки
+        # Нормализация: убрать пробелы по краям у названий ЖК
+        if "Название ЖК" in df.columns:
+            df["Название ЖК"] = df["Название ЖК"].astype(str).str.strip()
+        
         required_cols = ["Название ЖК", "Ширина", "Долгота"]
         if not all(col in df.columns for col in required_cols):
             st.error(f"В файле отсутствуют обязательные колонки: {required_cols}")
             return pd.DataFrame()
         
-        # Приведём координаты к числу
         df["lat"] = pd.to_numeric(df["Ширина"], errors="coerce")
         df["lon"] = pd.to_numeric(df["Долгота"], errors="coerce")
         df = df.dropna(subset=["lat", "lon"]).reset_index(drop=True)

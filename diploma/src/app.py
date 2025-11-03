@@ -3,6 +3,7 @@ import pandas as pd
 import folium
 from streamlit_folium import st_folium
 import os
+import numpy as np
 
 # ===========================
 # ЗАГРУЗКА ДАННЫХ + РАСЧЁТ ISD
@@ -58,7 +59,7 @@ def load_jk_data():
         bike_score = (1 - df["bicycle_is"].fillna(0))
         sidewalk_score = (1 - (df["sidewalk_amount"] > 0).astype(int))
 
-# Инклюзивность: считаем, сколько из 3 есть
+        # Инклюзивность: считаем, сколько из 3 есть
         accessibility_sum = (
             df["is_pandus"].fillna(0) +
             df["step_down_platforms_is"].fillna(0) +
@@ -75,11 +76,12 @@ def load_jk_data():
         ).clip(0, 1)
 
         # Финальный ISD (веса можно настроить)
-        df["isd"] = (
+        df["isd"] = np.round(
             0.5 * score_housing +
             0.3 * comfort_score +
-            0.2 * infra_score
-        ).round(3)
+            0.2 * infra_score,
+            3
+        )
         
         return df
     

@@ -38,7 +38,8 @@ def load_jk_data():
 
         # 2. Комфорт проживания (чем ниже балл — тем лучше)
         flats_per_floor_score = (df["avg_flats_on_floor"] / 8).clip(0, 1)  # 8 — норма
-        parking_score = (1 - (pd.to_numeric(df["percent_of_parking"].str.rstrip('%'), errors='coerce') / 100)).clip(0, 1)
+        parking_share = pd.to_numeric(df["percent_of_parking"], errors="coerce")
+        parking_score = (1 - parking_share).clip(0, 1)
         ceiling_score = (2.7 - df["min_ceiling_height"]).clip(0, 1) / 0.5  # штраф за <2.7 м
         floors_score = (df["max_floors"] - 25).clip(0, 10) / 10  # штраф за >25 этажей
         elevators_score = (2 - df["elevators_on_entracne"]).clip(0, 1)  # цель — 2 лифта

@@ -29,15 +29,57 @@ def load_jk_data():
 
         df["name"] = df["name"].astype(str).str.strip()
         
-        # === РАСЧЁТ ИНДЕКСА СОЦИАЛЬНОГО ДИСБАЛАНСА (ISD) ===
-        df["studio_pct"] = df["studio_amount"] / df["all_amount"]
-        # Нормируем площадь: 35 м² — ориентир минимальной комфортной площади на человека (для 1-комн.)
-        df["area_score"] = 35 / df["avg_living_area_m2"]
-        df["area_score"] = df["area_score"].clip(lower=0, upper=2)  # ограничиваем выбросы
+        # === РАСЧЁТ МНОГОФАКТОРНОГО ИНДЕКСА СОЦИАЛЬНОГО ДИСБАЛАНСА (ISD) ===
         
-        # Веса: студии (70%), площадь (30%)
-        df["isd"] = 0.7 * df["studio_pct"] + 0.3 * df["area_score"]
-        df["isd"] = df["isd"].round(3)
+        df["studio_pct"] = df["studio_amount"] / df["all_amount"]
+        df["area_score"] = (35 / df["avg_living_area_m2"]).clip(0, 2)
+        score_housing = 0.7 * df["studio_pct"] + 0.3 * df["area_score"]
+
+        # 2. Комфорт проживания (чем ниже балл — тем лучше)
+        flats_per_floor_score = (df["avg_flats_on_floor"] / 8).clip(0, 1)  # 8 — норма
+        parking_score = (1 - (pd.to_numeric(df["percent_of_parking"].str.rstrip('%'), errors='coerce') / 100)).clip(0, 1)
+        ceiling_score = (2.7 - df["min_ceiling_height"]).clip(0, 1) / 0.5  # штраф за <2.7 м
+        floors_score = (df["max_floors"] - 25).clip(0, 10) / 10  # штраф за >25 этажей
+        elevators_score = (2 - df["elevators_on_entracne"]).clip(0, 1)  # цель — 2 лифта
+
+        comfort_score = (
+            0.3 * flats_per_floor_score +
+            0.25 * parking_score +
+            0.2 * ceiling_score +
+            0.15 * floors_score +
+            0.1 * elevators_score
+        ).clip(0, 1)
+
+        # 3. Доступность и инфраструктура
+        df["children_norm"] = (df["children_playing_zone_amount"] / (df["all_amount"] / 300)).fillna(0)
+        children_score = (1 - df["children_norm"].clip(0, 1)).clip(0, 1)
+
+        sports_score = (1 - (df["sports_amount"] > 0).astype(int))
+        bike_score = (1 - df["bicycle_is"].fillna(0))
+        sidewalk_score = (1 - (df["sidewalk_amount"] > 0).astype(int))
+
+# Инклюзивность: считаем, сколько из 3 есть
+        accessibility_sum = (
+            df["is_pandus"].fillna(0) +
+            df["step_down_platforms_is"].fillna(0) +
+            (df["wheelchair_lift_amount"] > 0).astype(int)
+        )
+        accessibility_score = (3 - accessibility_sum) / 3  # 0 = всё есть, 1 = ничего нет
+
+        infra_score = (
+            0.3 * children_score +
+            0.2 * sports_score +
+            0.15 * bike_score +
+            0.15 * sidewalk_score +
+            0.2 * accessibility_score
+        ).clip(0, 1)
+
+        # Финальный ISD (веса можно настроить)
+        df["isd"] = (
+            0.5 * score_housing +
+            0.3 * comfort_score +
+            0.2 * infra_score
+        ).round(3)
         
         return df
     
@@ -161,7 +203,7 @@ if st.session_state.selected_jk_name:
         st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
         st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
         st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
-        st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—').round(3)}")
+        st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—')}")
 
     st.markdown("---")
     st.markdown("#### 📐 Архитектурные параметры")

@@ -5,7 +5,7 @@ from streamlit_folium import st_folium
 import os
 
 # ===========================
-# ЗАГРУЗКА ДАННЫХ
+# ЗАГРУЗКА ДАННЫХ + РАСЧЁТ ISD
 # ===========================
 @st.cache_data
 def load_jk_data():
@@ -17,19 +17,27 @@ def load_jk_data():
     try:
         df = pd.read_excel(DATA_FILE)
         
-        # Убедимся, что обязательные колонки есть
-        required = ["name", "latitude", "longitude"]
+        required = ["name", "latitude", "longitude", "all_amount", "studio_amount", "avg_living_area_m2"]
         if not all(col in df.columns for col in required):
             st.error(f"Отсутствуют обязательные колонки: {required}")
             return pd.DataFrame()
         
-        # Приведём координаты к числу (на всякий случае)
-        df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
-        df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
-        df = df.dropna(subset=["latitude", "longitude"]).reset_index(drop=True)
-        
-        # Убедимся, что названия ЖК — строки без лишних пробелов
+        # Приведение к числу
+        for col in ["latitude", "longitude", "all_amount", "studio_amount", "avg_living_area_m2"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+        df = df.dropna(subset=["latitude", "longitude", "all_amount", "avg_living_area_m2"])
+
         df["name"] = df["name"].astype(str).str.strip()
+        
+        # === РАСЧЁТ ИНДЕКСА СОЦИАЛЬНОГО ДИСБАЛАНСА (ISD) ===
+        df["studio_pct"] = df["studio_amount"] / df["all_amount"]
+        # Нормируем площадь: 35 м² — ориентир минимальной комфортной площади на человека (для 1-комн.)
+        df["area_score"] = 35 / df["avg_living_area_m2"]
+        df["area_score"] = df["area_score"].clip(lower=0, upper=2)  # ограничиваем выбросы
+        
+        # Веса: студии (70%), площадь (30%)
+        df["isd"] = 0.7 * df["studio_pct"] + 0.3 * df["area_score"]
+        df["isd"] = df["isd"].round(3)
         
         return df
     
@@ -37,30 +45,22 @@ def load_jk_data():
         st.error(f"Ошибка при чтении файла: {e}")
         return pd.DataFrame()
 
-# Загрузка инфраструктуры
-def load_infrastructure():  # УБРАЛИ @st.cache_data
+
+# Загрузка инфраструктуры (оставим на будущее, но сейчас не используется для ISD)
+def load_infrastructure():
     INFRA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "infrastructure.xlsx")
     if not os.path.exists(INFRA_FILE):
-        st.error(f"Файл '{INFRA_FILE}' не найден.")
         return pd.DataFrame()
 
     try:
         df = pd.read_excel(INFRA_FILE)
-        
-        # Приведём к нужным типам
-        df["JK_name"] = df["JK_name"].astype(str).str.strip()
+        df["name"] = df["name"].astype(str).str.strip()
         df["latitude"] = pd.to_numeric(df["latitude"], errors="coerce")
         df["longitude"] = pd.to_numeric(df["longitude"], errors="coerce")
-        df = df.dropna(subset=["latitude", "longitude"])
-        
-        # Переименуем колонку для совместимости
-        df = df.rename(columns={"JK_name": "jk_name", "longtitude": "longitude"})
-        
-        return df
-    
-    except Exception as e:
-        st.error(f"Ошибка при чтении файла инфраструктуры: {e}")
+        return df.dropna(subset=["latitude", "longitude"])
+    except:
         return pd.DataFrame()
+
 
 df_jk = load_jk_data()
 df_infra = load_infrastructure()
@@ -74,20 +74,10 @@ if df_jk.empty:
     st.stop()
 
 # ===========================
-# СИНХРОНИЗАЦИЯ СОСТОЯНИЯ С URL
+# СИНХРОНИЗАЦИЯ СОСТОЯНИЯ
 # ===========================
-jk_name_from_url = st.query_params.get("jk_name", None)
-
-# Если в URL есть jk_name и оно существует в данных
-if jk_name_from_url and jk_name_from_url in df_jk["name"].values:
-    st.session_state.selected_jk_name = jk_name_from_url
-# Если в URL нет, но в session_state есть, используем его
-elif "selected_jk_name" not in st.session_state or st.session_state.selected_jk_name not in df_jk["name"].values:
-    # Иначе — первый ЖК
-    st.session_state.selected_jk_name = df_jk.iloc[0]["name"] if not df_jk.empty else None
-else:
-    # Оставляем текущее состояние
-    pass
+if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_name not in df_jk["name"].values:
+    st.session_state.selected_jk_name = df_jk.iloc[0]["name"]
 
 # ===========================
 # ИНТЕРФЕЙС
@@ -99,76 +89,51 @@ st.markdown("Кликните по метке на карте, чтобы уви
 # ===========================
 # КАРТА
 # ===========================
-# Центрируем карту на выбранном ЖК
 selected_row = df_jk[df_jk["name"] == st.session_state.selected_jk_name].iloc[0]
 m = folium.Map(
     location=[selected_row["latitude"], selected_row["longitude"]],
-    zoom_start=12,  # Уменьшили зум, чтобы видеть все ЖК
+    zoom_start=11,
     tiles="CartoDB positron"
 )
 
-# Добавляем маркеры для ВСЕХ ЖК
+# Добавляем маркеры ЖК с цветом по ISD
 for _, row in df_jk.iterrows():
+    isd_val = row.get("isd", 0)
+    if isd_val >= 0.6:
+        color = "red"
+    elif isd_val >= 0.4:
+        color = "orange"
+    else:
+        color = "green"
+    
     folium.Marker(
         location=[row["latitude"], row["longitude"]],
         popup=row["name"],
-        tooltip=row["name"],
-        icon=folium.Icon(
-            color="red" if row["name"] == st.session_state.selected_jk_name else "lightblue",
-            icon="home",
-            prefix="fa"
-        )
+        tooltip=f"{row['name']} (ISD: {isd_val:.2f})",
+        icon=folium.Icon(color=color, icon="home", prefix="fa")
     ).add_to(m)
 
-# Фильтруем инфраструктуру для выбранного ЖК
-infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
+map_data = st_folium(m, width=900, height=500, returned_objects=["last_object_clicked_popup"])
 
-# Добавляем инфраструктуру
-for _, row in infra_for_jk.iterrows():
-    # Определяем цвет иконки по типу
-    icon_color = {
-        "school": "blue",
-        "kindergarten": "orange",
-        "park": "green",
-        "metro": "purple",
-        "shop": "darkred",
-        "hospital": "cadetblue"
-    }.get(row["type"], "gray")
-
-    folium.Marker(
-        location=[row["latitude"], row["longitude"]],
-        popup=f"{row['name']} ({row['type']})",
-        tooltip=row["name"],
-        icon=folium.Icon(color=icon_color, popupAnchor=(0, -10))
-    ).add_to(m)
-
-# Отображаем карту
-map_data = st_folium(
-    m,
-    width=900,
-    height=500,
-    returned_objects=["last_object_clicked_popup"]
-)
-
-# ===========================
-# ОБНОВЛЕНИЕ ВЫБОРА ПО КЛИКУ НА КАРТЕ
-# ===========================
+# Обновление выбора по клику
 if map_data and map_data.get("last_object_clicked_popup"):
     clicked_name = map_data["last_object_clicked_popup"]
-    if clicked_name in df_jk["name"].values:
-        if clicked_name != st.session_state.selected_jk_name:
-            st.session_state.selected_jk_name = clicked_name
-            st.query_params.jk_name = clicked_name  # Обновляем URL
-            st.rerun()  # Принудительно перезапускаем
+    if clicked_name in df_jk["name"].values and clicked_name != st.session_state.selected_jk_name:
+        st.session_state.selected_jk_name = clicked_name
+        st.rerun()
 
 # ===========================
-# ДЕТАЛИ ЖК + ИНФРАСТРУКТУРА
+# ДЕТАЛИ ЖК
 # ===========================
 st.subheader("Подробная информация")
 
 if st.session_state.selected_jk_name:
     jk = df_jk[df_jk["name"] == st.session_state.selected_jk_name].iloc[0].to_dict()
     st.markdown(f"### 🏢 {jk['name']}")
+    
+    # === НОВОЕ: Индекс социального дисбаланса ===
+    st.metric("Индекс социального дисбаланса (ISD)", f"{jk.get('isd', 0):.3f}")
+    st.caption("Чем ближе к 1 — тем сильнее дисбаланс (много малогабариток, низкая площадь на квартиру)")
 
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -205,17 +170,10 @@ if st.session_state.selected_jk_name:
     st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
     st.write(f"- Средняя общая площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
 
-    # ===========================
-    # ИНФРАСТРУКТУРА РЯДОМ
-    # ===========================
+    # Инфраструктура рядом (из infrastructure.xlsx, если будет расширена)
     st.markdown("---")
     st.subheader("📍 Инфраструктура рядом")
-
-    if not infra_for_jk.empty:
-        for _, infra in infra_for_jk.iterrows():
-            st.write(f"- **{infra['name']}** ({infra['type']}) — {infra.get('distance m', '—')} м")
-    else:
-        st.write("Инфраструктура не найдена.")
+    st.write("Данные по инфраструктуре пока дублируют ЖК. В будущем сюда будут подгружаться школы, метро и т.д.")
 
 else:
     st.info("Выберите ЖК на карте для просмотра деталей.")

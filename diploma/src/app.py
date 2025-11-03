@@ -205,7 +205,7 @@ if st.session_state.selected_jk_name:
         st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
         st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
         st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
-        st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—')}")
+        #st.write(f"- Обеспеченность машиноместами: {jk.get('percent_of_parking', '—')}")
 
     st.markdown("---")
     st.markdown("#### 📐 Архитектурные параметры")

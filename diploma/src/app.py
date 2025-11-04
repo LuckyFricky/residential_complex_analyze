@@ -111,18 +111,51 @@ if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_na
     st.session_state.selected_jk_name = df_jk.iloc[0]["name"]
 
 st.sidebar.title("🏙️ Анализ ЖК")
-# Поиск ЖК
-search_query = st.sidebar.text_input("🔍 Поиск ЖК", placeholder="Введите название...")
 
-if search_query:
-    matched_jks = df_jk[df_jk["name"].str.contains(search_query, case=False, na=False)]
-    if not matched_jks.empty:
-        candidate = matched_jks.iloc[0]["name"]
-        if candidate != st.session_state.selected_jk_name:
-            st.session_state.selected_jk_name = candidate
-            st.rerun()
-    else:
-        st.sidebar.warning("ЖК не найден")
+
+# Динамический поиск с автозаполнением
+if "search_query" not in st.session_state:
+    st.session_state.search_query = ""
+
+search_input = st.sidebar.text_input(
+    "🔍 Поиск ЖК",
+    value=st.session_state.search_query,
+    placeholder="Начните вводить название...",
+    key="jk_search_input"
+)
+
+# Обновляем сессию при изменении (нужно для реактивности)
+if search_input != st.session_state.search_query:
+    st.session_state.search_query = search_input
+    st.rerun()  # немедленно обновляем список
+
+# Фильтрация
+if search_input.strip() == "":
+    filtered_names = df_jk["name"].tolist()
+else:
+    filtered_df = df_jk[
+        df_jk["name"].str.contains(search_input, case=False, na=False)
+    ]
+    filtered_names = filtered_df["name"].tolist()
+
+# Выпадающий список с совпадениями
+if filtered_names:
+    selected_jk = st.sidebar.selectbox(
+        "Результаты поиска",
+        filtered_names,
+        index=0,
+        key="jk_search_select"
+    )
+    # Если выбран ЖК — переключаемся на него
+    if selected_jk != st.session_state.selected_jk_name:
+        st.session_state.selected_jk_name = selected_jk
+        st.session_state.search_query = ""  # очищаем поиск после выбора (опционально)
+        st.rerun()
+else:
+    st.sidebar.info("ЖК не найдены")
+    selected_jk = None
+
+    
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
 st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")

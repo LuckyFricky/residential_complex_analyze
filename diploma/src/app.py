@@ -111,6 +111,18 @@ if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_na
     st.session_state.selected_jk_name = df_jk.iloc[0]["name"]
 
 st.sidebar.title("🏙️ Анализ ЖК")
+# Поиск ЖК
+search_query = st.sidebar.text_input("🔍 Поиск ЖК", placeholder="Введите название...")
+
+if search_query:
+    matched_jks = df_jk[df_jk["name"].str.contains(search_query, case=False, na=False)]
+    if not matched_jks.empty:
+        candidate = matched_jks.iloc[0]["name"]
+        if candidate != st.session_state.selected_jk_name:
+            st.session_state.selected_jk_name = candidate
+            st.rerun()
+    else:
+        st.sidebar.warning("ЖК не найден")
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
 st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")

@@ -162,10 +162,11 @@ m = folium.Map(
 for _, row in df_jk.iterrows():
     isd_val = row.get("isd", 0)
     color = "red" if isd_val >= 0.6 else "orange" if isd_val >= 0.4 else "green"
+    popup_content = f"JK_SELECTOR::{row['name']}<br>ISD: {isd_val:.2f}"
     folium.Marker(
         location=[row["latitude"], row["longitude"]],
-        popup=f"{row['name']}<br>ISD: {isd_val:.2f}",
-        tooltip=row["name"],  # ← именно это будет возвращено
+        popup=popup_content,
+        tooltip=row["name"],
         icon=folium.Icon(color=color, icon="home", prefix="fa")
     ).add_to(m)
 
@@ -191,15 +192,17 @@ map_data = st_folium(
     m,
     width=900,
     height=500,
-    returned_objects=["last_object_clicked_tooltip"]  # ← исправлено!
+    returned_objects=["last_object_clicked_popup"]  # ← именно popup!
 )
 
 # Обработка клика по ЖК
-if map_data and map_data.get("last_object_clicked_tooltip"):
-    clicked_name = map_data["last_object_clicked_tooltip"]
-    if clicked_name in df_jk["name"].values and clicked_name != st.session_state.selected_jk_name:
-        st.session_state.selected_jk_name = clicked_name
-        st.rerun()
+if map_data and map_data.get("last_object_clicked_popup"):
+    popup_text = map_data["last_object_clicked_popup"]
+    if popup_text and "JK_SELECTOR::" in popup_text:
+        clicked_name = popup_text.split("JK_SELECTOR::")[1].split("<")[0].strip()
+        if clicked_name in df_jk["name"].values and clicked_name != st.session_state.selected_jk_name:
+            st.session_state.selected_jk_name = clicked_name
+            st.rerun()
 # ===========================
 # ДЕТАЛИ
 # ===========================

@@ -177,11 +177,11 @@ for _, row in df_jk.iterrows():
     folium.Marker(
         location=[row["latitude"], row["longitude"]],
         popup=f"{row['name']}<br>ISD: {isd_val:.2f}",
-        tooltip=row["name"],
+        tooltip=row["name"],  # ← именно это будет возвращено
         icon=folium.Icon(color=color, icon="home", prefix="fa")
     ).add_to(m)
 
-# Инфраструктура (если есть)
+# Инфраструктура для выбранного ЖК
 if not df_infra.empty:
     infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
     type_colors = {
@@ -203,25 +203,15 @@ map_data = st_folium(
     m,
     width=900,
     height=500,
-    returned_objects=["last_object_clicked"]  # ← именно это нужно!
+    returned_objects=["last_object_clicked_tooltip"]  # ← исправлено!
 )
 
-# Обработка клика по ЖК (по координатам)
-if map_data and map_data.get("last_object_clicked"):
-    clicked_lat = map_data["last_object_clicked"]["lat"]
-    clicked_lng = map_data["last_object_clicked"]["lng"]
-    
-    # Находим ближайший ЖК
-    df_jk["dist_click"] = (
-        (df_jk["latitude"] - clicked_lat)**2 + 
-        (df_jk["longitude"] - clicked_lng)**2
-    )
-    nearest_jk_name = df_jk.loc[df_jk["dist_click"].idxmin(), "name"]
-    
-    if nearest_jk_name != st.session_state.selected_jk_name:
-        st.session_state.selected_jk_name = nearest_jk_name
+# Обработка клика по ЖК
+if map_data and map_data.get("last_object_clicked_tooltip"):
+    clicked_name = map_data["last_object_clicked_tooltip"]
+    if clicked_name in df_jk["name"].values and clicked_name != st.session_state.selected_jk_name:
+        st.session_state.selected_jk_name = clicked_name
         st.rerun()
-
 # ===========================
 # ДЕТАЛИ
 # ===========================

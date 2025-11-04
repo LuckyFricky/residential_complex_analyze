@@ -33,7 +33,7 @@ def load_jk_data():
         score_housing = 0.7 * df["studio_pct"] + 0.3 * df["area_score"]
 
         flats_per_floor_score = (df["avg_flats_on_floor"] / 8).clip(0, 1)
-        parking_share = pd.to_numeric(df["percent_of_parking"], errors="coerce")
+        parking_share = pd.to_numeric(df["percent_of_parking"].str.rstrip('%'), errors="coerce") / 100
         parking_score = (1 - parking_share).clip(0, 1)
         ceiling_score = (2.7 - df["min_ceiling_height"]).clip(0, 1) / 0.5
         floors_score = (df["max_floors"] - 25).clip(0, 10) / 10
@@ -82,12 +82,21 @@ def load_infrastructure():
 
     try:
         df = pd.read_excel(INFRA_FILE)
-        # Ожидаем колонки: jk_name, name, type, latitude, longitude
-        required = ["jk_name", "name", "type", "latitude", "longitude"]
-        if not all(col in df.columns for col in required):
-            st.warning("Файл infrastructure.xlsx не содержит нужных колонок: jk_name, name, type, latitude, longitude")
-            return pd.DataFrame()
-        
+        # Если файл — копия ZHK, временно преобразуем его в инфраструктуру
+        if "jk_name" not in df.columns:
+            # Создаём фиктивную инфраструктуру на основе ЖК
+            infra_rows = []
+            for _, jk in df.iterrows():
+                # Добавим по одному объекту каждого типа рядом с ЖК
+                base_lat = jk["latitude"]
+                base_lon = jk["longitude"]
+                infra_rows.extend([
+                    {"jk_name": jk["name"], "name": f"Школа у {jk['name']}", "type": "school", "latitude": base_lat + 0.001, "longitude": base_lon},
+                    {"jk_name": jk["name"], "name": f"Метро у {jk['name']}", "type": "metro", "latitude": base_lat, "longitude": base_lon + 0.001},
+                    {"jk_name": jk["name"], "name": f"Парк у {jk['name']}", "type": "park", "latitude": base_lat - 0.001, "longitude": base_lon},
+                ])
+            df = pd.DataFrame(infra_rows)
+
         df["jk_name"] = df["jk_name"].astype(str).str.strip()
         df["name"] = df["name"].astype(str).str.strip()
         df["type"] = df["type"].astype(str).str.lower()
@@ -112,11 +121,9 @@ if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_na
 
 st.sidebar.title("🏙️ Анализ ЖК")
 
-
- #=== ЕДИНЫЙ ВЫБОР ЖК ЧЕРЕЗ САЙДБАР ===
+# === ЕДИНЫЙ ВЫБОР ЖК ЧЕРЕЗ САЙДБАР ===
 jk_names = df_jk["name"].tolist()
 
-# Поиск: фильтрация списка
 search_query = st.sidebar.text_input("🔍 Поиск ЖК", placeholder="Начните вводить название...")
 if search_query:
     filtered_names = df_jk[
@@ -125,21 +132,18 @@ if search_query:
 else:
     filtered_names = jk_names
 
-# Определяем, какой индекс сейчас выбран (для selectbox)
 if st.session_state.selected_jk_name in filtered_names:
     current_index = filtered_names.index(st.session_state.selected_jk_name)
 else:
-    current_index = 0  # fallback
+    current_index = 0
 
-# Выпадающий список, всегда синхронизированный с selected_jk_name
 selected_from_ui = st.sidebar.selectbox(
     "Выберите жилой комплекс",
     filtered_names,
     index=current_index,
-    key="jk_selector"  # ключ для отслеживания изменений
+    key="jk_selector"
 )
 
-# Если пользователь выбрал что-то в selectbox — обновляем состояние
 if selected_from_ui != st.session_state.selected_jk_name:
     st.session_state.selected_jk_name = selected_from_ui
     st.rerun()
@@ -187,12 +191,11 @@ if not df_infra.empty:
             icon=folium.Icon(color=color, icon="info-sign")
         ).add_to(m)
 
-# Отображаем карту
 map_data = st_folium(
     m,
     width=900,
     height=500,
-    returned_objects=["last_object_clicked_popup"]  # ← именно popup!
+    returned_objects=["last_object_clicked_popup"]
 )
 
 # Обработка клика по ЖК
@@ -203,6 +206,7 @@ if map_data and map_data.get("last_object_clicked_popup"):
         if clicked_name in df_jk["name"].values and clicked_name != st.session_state.selected_jk_name:
             st.session_state.selected_jk_name = clicked_name
             st.rerun()
+
 # ===========================
 # ДЕТАЛИ
 # ===========================
@@ -248,7 +252,6 @@ if st.session_state.selected_jk_name:
     st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
     st.write(f"- Средняя площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
 
-    # === НАСТОЯЩАЯ ИНФРАСТРУКТУРА РЯДОМ ===
     st.markdown("---")
     st.subheader("📍 Инфраструктура рядом")
     if not df_infra.empty:

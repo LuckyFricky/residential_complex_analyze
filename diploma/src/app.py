@@ -113,48 +113,36 @@ if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_na
 st.sidebar.title("🏙️ Анализ ЖК")
 
 
-# Динамический поиск с автозаполнением
-if "search_query" not in st.session_state:
-    st.session_state.search_query = ""
+ #=== ЕДИНЫЙ ВЫБОР ЖК ЧЕРЕЗ САЙДБАР ===
+jk_names = df_jk["name"].tolist()
 
-search_input = st.sidebar.text_input(
-    "🔍 Поиск ЖК",
-    value=st.session_state.search_query,
-    placeholder="Начните вводить название...",
-    key="jk_search_input"
+# Поиск: фильтрация списка
+search_query = st.sidebar.text_input("🔍 Поиск ЖК", placeholder="Начните вводить название...")
+if search_query:
+    filtered_names = df_jk[
+        df_jk["name"].str.contains(search_query, case=False, na=False)
+    ]["name"].tolist()
+else:
+    filtered_names = jk_names
+
+# Определяем, какой индекс сейчас выбран (для selectbox)
+if st.session_state.selected_jk_name in filtered_names:
+    current_index = filtered_names.index(st.session_state.selected_jk_name)
+else:
+    current_index = 0  # fallback
+
+# Выпадающий список, всегда синхронизированный с selected_jk_name
+selected_from_ui = st.sidebar.selectbox(
+    "Выберите жилой комплекс",
+    filtered_names,
+    index=current_index,
+    key="jk_selector"  # ключ для отслеживания изменений
 )
 
-# Обновляем сессию при изменении (нужно для реактивности)
-if search_input != st.session_state.search_query:
-    st.session_state.search_query = search_input
-    st.rerun()  # немедленно обновляем список
-
-# Фильтрация
-if search_input.strip() == "":
-    filtered_names = df_jk["name"].tolist()
-else:
-    filtered_df = df_jk[
-        df_jk["name"].str.contains(search_input, case=False, na=False)
-    ]
-    filtered_names = filtered_df["name"].tolist()
-
-# Выпадающий список с совпадениями
-if filtered_names:
-    selected_jk = st.sidebar.selectbox(
-        "Результаты поиска",
-        filtered_names,
-        index=0,
-        key="jk_search_select"
-    )
-    # Если выбран ЖК — переключаемся на него
-    if selected_jk != st.session_state.selected_jk_name:
-        st.session_state.selected_jk_name = selected_jk
-        st.session_state.search_query = ""  # очищаем поиск после выбора (опционально)
-        st.rerun()
-else:
-    st.sidebar.info("ЖК не найдены")
-    selected_jk = None
-
+# Если пользователь выбрал что-то в selectbox — обновляем состояние
+if selected_from_ui != st.session_state.selected_jk_name:
+    st.session_state.selected_jk_name = selected_from_ui
+    st.rerun()
 
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")

@@ -33,7 +33,12 @@ def load_jk_data():
         score_housing = 0.7 * df["studio_pct"] + 0.3 * df["area_score"]
 
         flats_per_floor_score = (df["avg_flats_on_floor"] / 8).clip(0, 1)
-        parking_share = pd.to_numeric(df["percent_of_parking"].str.rstrip('%'), errors="coerce") / 100
+        # Уже в долях (0.32 = 32%), но могут быть и в процентах (171.76) — определим по максимуму
+        parking_raw = pd.to_numeric(df["percent_of_parking"], errors="coerce")
+        if parking_raw.max() > 2:  # если есть значения >200%, значит, это проценты (171.76)
+            parking_share = parking_raw / 100
+        else:
+            parking_share = parking_raw  # уже доля (0.32 = 32%)
         parking_score = (1 - parking_share).clip(0, 1)
         ceiling_score = (2.7 - df["min_ceiling_height"]).clip(0, 1) / 0.5
         floors_score = (df["max_floors"] - 25).clip(0, 10) / 10
@@ -82,20 +87,8 @@ def load_infrastructure():
 
     try:
         df = pd.read_excel(INFRA_FILE)
-        # Если файл — копия ZHK, временно преобразуем его в инфраструктуру
-        if "jk_name" not in df.columns:
-            # Создаём фиктивную инфраструктуру на основе ЖК
-            infra_rows = []
-            for _, jk in df.iterrows():
-                # Добавим по одному объекту каждого типа рядом с ЖК
-                base_lat = jk["latitude"]
-                base_lon = jk["longitude"]
-                infra_rows.extend([
-                    {"jk_name": jk["name"], "name": f"Школа у {jk['name']}", "type": "school", "latitude": base_lat + 0.001, "longitude": base_lon},
-                    {"jk_name": jk["name"], "name": f"Метро у {jk['name']}", "type": "metro", "latitude": base_lat, "longitude": base_lon + 0.001},
-                    {"jk_name": jk["name"], "name": f"Парк у {jk['name']}", "type": "park", "latitude": base_lat - 0.001, "longitude": base_lon},
-                ])
-            df = pd.DataFrame(infra_rows)
+        
+        
 
         df["jk_name"] = df["jk_name"].astype(str).str.strip()
         df["name"] = df["name"].astype(str).str.strip()

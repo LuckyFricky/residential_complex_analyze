@@ -162,21 +162,38 @@ elif mode == "Сравнение ЖК":
     jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
 
 # ===========================
-# КАРТА
+# КАРТА — ДИНАМИЧЕСКАЯ ПОД ФИЛЬТР
 # ===========================
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
 
+# Определяем центр карты
 if mode == "Изучение ЖК":
-    center_lat, center_lng = jk_data["latitude"], jk_data["longitude"]
+    if selected_jk and not filtered_df.empty:
+        center_lat, center_lng = jk_data["latitude"], jk_data["longitude"]
+        zoom = 13
+        display_jk_df = filtered_df  # ← только отфильтрованные ЖК!
+    else:
+        # Если нет фильтров или все отфильтрованы — показываем всё или ничего
+        center_lat, center_lng = df_jk["latitude"].mean(), df_jk["longitude"].mean()
+        zoom = 11
+        display_jk_df = filtered_df if not filtered_df.empty else df_jk
 elif mode == "Сравнение ЖК":
+    # (сохраняем старую логику сравнения — без изменений)
+    jk_a = st.sidebar.selectbox("ЖК A", df_jk["name"].tolist(), index=0)
+    jk_b = st.sidebar.selectbox("ЖК B", df_jk["name"].tolist(), index=1 if len(df_jk) > 1 else 0)
+    jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
+    jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
     center_lat = (jk_a_data["latitude"] + jk_b_data["latitude"]) / 2
     center_lng = (jk_a_data["longitude"] + jk_b_data["longitude"]) / 2
+    zoom = 12
+    display_jk_df = df_jk  # в режиме сравнения — все ЖК
 
-m = folium.Map(location=[center_lat, center_lng], zoom_start=12, tiles="CartoDB positron")
+# Создаём карту
+m = folium.Map(location=[center_lat, center_lng], zoom_start=zoom, tiles="CartoDB positron")
 
-# Все ЖК
-for _, row in df_jk.iterrows():
+# Отображаем ТОЛЬКО ЖК из display_jk_df (отфильтрованные или все)
+for _, row in display_jk_df.iterrows():
     isd_val = row.get("isd", 0)
     color = "red" if isd_val >= 0.6 else "orange" if isd_val >= 0.4 else "green"
     folium.Marker(
@@ -188,17 +205,18 @@ for _, row in df_jk.iterrows():
 
 # Инфраструктура
 if not df_infra.empty:
-    if mode == "Изучение ЖК":
-        infra_list = [selected_jk]
-    else:
-        infra_list = [jk_a, jk_b]
+    infra_to_show = []
+    if mode == "Изучение ЖК" and selected_jk:
+        infra_to_show = [selected_jk]
+    elif mode == "Сравнение ЖК":
+        infra_to_show = [jk_a, jk_b]
     
     type_colors = {
         "school": "blue", "kindergarten": "orange", "metro": "purple",
         "park": "green", "shop": "darkred", "hospital": "cadetblue",
         "sports": "pink", "playground": "lightgreen"
     }
-    for jk_name in infra_list:
+    for jk_name in infra_to_show:
         current_infra = df_infra[df_infra["jk_name"] == jk_name]
         for _, row in current_infra.iterrows():
             color = type_colors.get(row["type"], "gray")

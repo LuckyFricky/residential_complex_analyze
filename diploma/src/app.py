@@ -155,8 +155,8 @@ if mode == "Изучение ЖК":
         jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
         
 elif mode == "Сравнение ЖК":
-    jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0, key = "jk_a")
-    jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0, key = "jk_b")
+    jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0)
+    jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0)
     jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
     jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
 

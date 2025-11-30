@@ -119,8 +119,42 @@ default_a = jk_names[0]
 default_b = jk_names[1] if len(jk_names) > 1 else jk_names[0]
 
 if mode == "Изучение ЖК":
-    selected_jk = st.sidebar.selectbox("Выберите ЖК", jk_names, index=0)
-    jk_data = df_jk[df_jk["name"] == selected_jk].iloc[0].to_dict()
+    st.sidebar.markdown("### 🧭 Фильтры")
+    
+    # 1. Максимальный ISD
+    max_isd = st.sidebar.slider("Макс. ISD", 0.0, 1.0, 1.0, 0.01)
+    
+    # 2. Чекбоксы
+    with_bike = st.sidebar.checkbox("Только с велодорожками", value=False)
+    with_pandus = st.sidebar.checkbox("Только с пандусом", value=False)
+    high_rise = st.sidebar.checkbox("Более 20 этажей", value=False)
+    
+    # 3. Минимум 3-комнатных
+    min_3room = st.sidebar.number_input("Мин. кол-во 3-комнатных", min_value=0, value=0, step=10)
+
+    # Применяем фильтры
+    filtered_df = df_jk.copy()
+    filtered_df = filtered_df[filtered_df["isd"] <= max_isd]
+    
+    if with_bike:
+        filtered_df = filtered_df[filtered_df["bicycle_is"] == 1]
+    if with_pandus:
+        filtered_df = filtered_df[filtered_df["is_pandus"] == 1]
+    if high_rise:
+        filtered_df = filtered_df[filtered_df["max_floors"] > 20]
+    if min_3room > 0:
+        filtered_df = filtered_df[filtered_df["3_room_amount"] >= min_3room]
+    
+    # Проверка результата
+    if filtered_df.empty:
+        st.sidebar.warning("Нет ЖК, удовлетворяющих фильтрам.")
+        jk_names_filtered = ["(нет данных)"]
+        selected_jk = "(нет данных)"
+    else:
+        jk_names_filtered = filtered_df["name"].tolist()
+        selected_jk = st.sidebar.selectbox("Выберите ЖК", jk_names_filtered, index=0)
+        jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
+        
 elif mode == "Сравнение ЖК":
     jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0)
     jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0)

@@ -159,6 +159,10 @@ elif mode == "Сравнение ЖК":
     jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0)
     jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
     jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
+    center_lat = (jk_a_data["latitude"] + jk_b_data["latitude"]) / 2
+    center_lng = (jk_a_data["longitude"] + jk_b_data["longitude"]) / 2
+    zoom = 12
+    display_jk_df = df_jk  # в режиме сравнения — все ЖК
 
 # ===========================
 # КАРТА — ДИНАМИЧЕСКАЯ ПОД ФИЛЬТР
@@ -177,17 +181,8 @@ if mode == "Изучение ЖК":
         center_lat, center_lng = df_jk["latitude"].mean(), df_jk["longitude"].mean()
         zoom = 11
         display_jk_df = filtered_df if not filtered_df.empty else df_jk
-elif mode == "Сравнение ЖК":
-    # (сохраняем старую логику сравнения — без изменений)
-    jk_a = st.sidebar.selectbox("ЖК A", df_jk["name"].tolist(), index=0, key ="jk_a1")
-    jk_b = st.sidebar.selectbox("ЖК B", df_jk["name"].tolist(), index=1 if len(df_jk) > 1 else 0, key ="jk_b1")
-    jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
-    jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
-    center_lat = (jk_a_data["latitude"] + jk_b_data["latitude"]) / 2
-    center_lng = (jk_a_data["longitude"] + jk_b_data["longitude"]) / 2
-    zoom = 12
-    display_jk_df = df_jk  # в режиме сравнения — все ЖК
 
+    
 # Создаём карту
 m = folium.Map(location=[center_lat, center_lng], zoom_start=zoom, tiles="CartoDB positron")
 

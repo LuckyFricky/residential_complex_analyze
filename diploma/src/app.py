@@ -151,7 +151,7 @@ if mode == "Изучение ЖК":
         selected_jk = "(нет данных)"
     else:
         jk_names_filtered = filtered_df["name"].tolist()
-        selected_jk = st.sidebar.selectbox("Выберите ЖК", jk_names_filtered, index=0)
+        selected_jk = st.sidebar.selectbox("Выберите ЖК", jk_names_filtered, index= None, placeholder="Выберите жилой комплекс...", key = "jk_single")
         jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
         
 elif mode == "Сравнение ЖК":

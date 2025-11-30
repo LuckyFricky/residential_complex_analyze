@@ -4,7 +4,6 @@ import folium
 from streamlit_folium import st_folium
 import os
 import numpy as np
-from geopy.distance import geodesic
 
 # ===========================
 # ЗАГРУЗКА ДАННЫХ + РАСЧЁТ ISD
@@ -106,7 +105,6 @@ if df_jk.empty:
     st.error("Нет данных по ЖК.")
     st.stop()
 
-# Инициализация
 if "selected_jk_name" not in st.session_state:
     st.session_state.selected_jk_name = df_jk.iloc[0]["name"]
 
@@ -135,15 +133,15 @@ for _, row in df_jk.iterrows():
         icon=folium.Icon(color=color, icon="home", prefix="fa")
     ).add_to(m)
 
-# Инфраструктура
+# Инфраструктура: показываем ТОЛЬКО для выбранного ЖК
 if not df_infra.empty:
-    infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
+    current_infra = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
     type_colors = {
         "school": "blue", "kindergarten": "orange", "metro": "purple",
         "park": "green", "shop": "darkred", "hospital": "cadetblue",
         "sports": "pink", "playground": "lightgreen"
     }
-    for _, row in infra_for_jk.iterrows():
+    for _, row in current_infra.iterrows():
         color = type_colors.get(row["type"], "gray")
         folium.Marker(
             location=[row["latitude"], row["longitude"]],
@@ -152,33 +150,31 @@ if not df_infra.empty:
             icon=folium.Icon(color=color, icon="info-sign")
         ).add_to(m)
 
-# Отображаем карту и ловим КЛИК (только координаты)
 map_data = st_folium(
     m,
     width=900,
     height=500,
-    returned_objects=["last_clicked"]  # ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ
+    returned_objects=["last_clicked"]
 )
 
-# Обработка клика
+# Обработка клика — БЕЗ geopy
 if map_data and map_data.get("last_clicked"):
     click_lat = map_data["last_clicked"]["lat"]
     click_lng = map_data["last_clicked"]["lng"]
 
-    # Найти ближайший ЖК
-    df_jk["distance"] = df_jk.apply(
-        lambda row: geodesic((click_lat, click_lng), (row["latitude"], row["longitude"])).meters,
-        axis=1
+    df_jk["dist_deg"] = np.sqrt(
+        (df_jk["latitude"] - click_lat) ** 2 +
+        (df_jk["longitude"] - click_lng) ** 2
     )
-    nearest_jk = df_jk.loc[df_jk["distance"].idxmin()]
-    
-    if nearest_jk["distance"] < 500:  # если клик в пределах 500 метров от маркера
+    nearest_jk = df_jk.loc[df_jk["dist_deg"].idxmin()]
+
+    if nearest_jk["dist_deg"] < 0.005:  # ~500 м в Москве
         if nearest_jk["name"] != st.session_state.selected_jk_name:
             st.session_state.selected_jk_name = nearest_jk["name"]
             st.rerun()
 
 # ===========================
-# ДЕТАЛИ
+# ДЕТАЛИ ПО ВЫБРАННОМУ ЖК
 # ===========================
 st.subheader("Подробная информация")
 
@@ -225,9 +221,9 @@ if st.session_state.selected_jk_name:
     st.markdown("---")
     st.subheader("📍 Инфраструктура рядом")
     if not df_infra.empty:
-        infra_for_jk = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
-        if not infra_for_jk.empty:
-            for _, row in infra_for_jk.iterrows():
+        current_infra = df_infra[df_infra["jk_name"] == st.session_state.selected_jk_name]
+        if not current_infra.empty:
+            for _, row in current_infra.iterrows():
                 st.write(f"- **{row['name']}** ({row['type']})")
         else:
             st.write("Нет данных об инфраструктуре для этого ЖК.")

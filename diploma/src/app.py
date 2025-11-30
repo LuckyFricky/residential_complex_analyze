@@ -119,11 +119,11 @@ default_a = jk_names[0]
 default_b = jk_names[1] if len(jk_names) > 1 else jk_names[0]
 
 if mode == "Изучение ЖК":
-    if selected_jk is None or jk_data is None:
-        st.info("🏙️ **Добро пожаловать!**\n\nВыберите жилой комплекс в сайдбаре, чтобы увидеть подробную информацию.")
-    else:
-        st.subheader(f"🔍 Подробная информация: 🏢 {selected_jk}")
-        jk = jk_data
+    # === Инициализация ===
+    selected_jk = None
+    jk_data = None
+    filtered_df = df_jk  # по умолчанию — все ЖК
+
     st.sidebar.markdown("### 🧭 Фильтры")
     
     max_isd = st.sidebar.slider("Макс. ISD", 0.0, 1.0, 1.0, 0.01, key="max_isd")
@@ -132,6 +132,7 @@ if mode == "Изучение ЖК":
     high_rise = st.sidebar.checkbox("Более 20 этажей", value=False, key="high_rise_filter")
     min_3room = st.sidebar.number_input("Мин. кол-во 3-комнатных", min_value=0, value=0, step=10, key="min_3room")
 
+    # Применение фильтров
     filtered_df = df_jk.copy()
     filtered_df = filtered_df[filtered_df["isd"] <= max_isd]
     if with_bike:
@@ -143,10 +144,9 @@ if mode == "Изучение ЖК":
     if min_3room > 0:
         filtered_df = filtered_df[filtered_df["3_room_amount"] >= min_3room]
 
+    # Выбор ЖК
     if filtered_df.empty:
         st.sidebar.warning("Нет ЖК, удовлетворяющих фильтрам.")
-        selected_jk = None
-        jk_data = None
     else:
         jk_names_filtered = filtered_df["name"].tolist()
         selected_jk = st.sidebar.selectbox(
@@ -156,11 +156,73 @@ if mode == "Изучение ЖК":
             placeholder="Выберите жилой комплекс...",
             key="jk_single"
         )
-        # ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: проверка перед извлечением
         if selected_jk is not None and selected_jk in filtered_df["name"].values:
             jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
+
+    # === Определение параметров карты ===
+    if selected_jk is not None and jk_data is not None:
+        center_lat, center_lng = jk_data["latitude"], jk_data["longitude"]
+        zoom = 13
+        display_jk_df = filtered_df
+    else:
+        center_lat, center_lng = df_jk["latitude"].mean(), df_jk["longitude"].mean()
+        zoom = 11
+        display_jk_df = filtered_df if not filtered_df.empty else df_jk
+
+    # === Отображение информации ===
+    if selected_jk is None or jk_data is None:
+        st.info("🏙️ **Добро пожаловать!**\n\nВыберите жилой комплекс в сайдбаре, чтобы увидеть подробную информацию.")
+    else:
+        st.subheader(f"🔍 Подробная информация: 🏢 {selected_jk}")
+        jk = jk_data
+        st.metric("Индекс социального дисбаланса (ISD)", f"{jk.get('isd', 0):.3f}")
+        st.caption("Чем ближе к 1 — тем сильнее дисбаланс")
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Квартиры всего", int(jk.get("all_amount", 0)))
+            st.metric("Студии", int(jk.get("studio_amount", 0)))
+            st.metric("1-комн.", int(jk.get("1_room_amount", 0)))
+        with col2:
+            st.metric("2-комн.", int(jk.get("2_room_amount", 0)))
+            st.metric("3-комн.", int(jk.get("3_room_amount", 0)))
+            st.metric("4+ комнат", int(jk.get("4+_room_amount", 0)))
+        with col3:
+            st.metric("Лифтов", int(jk.get("elevators_amount", 0)))
+            st.metric("Подъездов", int(jk.get("entrances_amount", 0)))
+            st.metric("Машиномест", int(jk.get("places_for_cars_in_parking", 0)))
+
+        st.markdown("---")
+        st.markdown("#### 📊 Инфраструктура и доступность")
+        infra_col1, infra_col2 = st.columns(2)
+        with infra_col1:
+            st.write(f"- Детских площадок: {int(jk.get('children_playing_zone_amount', 0))}")
+            st.write(f"- Спортивных площадок: {int(jk.get('sports_amount', 0))}")
+            st.write(f"- Велодорожки: {'Да' if jk.get('bicycle_is') else 'Нет'}")
+            st.write(f"- Тротуары: {'Да' if jk.get('sidewalk_amount') else 'Нет'}")
+        with infra_col2:
+            st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
+            st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
+            st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
+
+        st.markdown("---")
+        st.markdown("#### 📐 Архитектурные параметры")
+        st.write(f"- Мин. высота потолков: {jk.get('min_ceiling_height', '—')} м")
+        st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
+        st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
+        st.write(f"- Средняя площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
+
+        st.markdown("---")
+        st.subheader("📍 Инфраструктура рядом")
+        if not df_infra.empty:
+            current_infra = df_infra[df_infra["jk_name"] == selected_jk]
+            if not current_infra.empty:
+                for _, row in current_infra.iterrows():
+                    st.write(f"- **{row['name']}** ({row['type']})")
+            else:
+                st.write("Нет данных об инфраструктуре для этого ЖК.")
         else:
-            jk_data = None
+            st.write("Файл infrastructure.xlsx не загружен.")
         
 elif mode == "Сравнение ЖК":
     jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0)

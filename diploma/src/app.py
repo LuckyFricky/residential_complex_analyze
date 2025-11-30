@@ -122,16 +122,15 @@ if mode == "Изучение ЖК":
     st.sidebar.markdown("### 🧭 Фильтры")
     
     # 1. Максимальный ISD
-    max_isd = st.sidebar.slider("Макс. ISD", 0.0, 1.0, 1.0, 0.01)
+    max_isd = st.sidebar.slider("Макс. ISD", 0.0, 1.0, 1.0, 0.01, key = "max_isd")
     
     # 2. Чекбоксы
-    with_bike = st.sidebar.checkbox("Только с велодорожками", value=False)
-    with_pandus = st.sidebar.checkbox("Только с пандусом", value=False)
-    high_rise = st.sidebar.checkbox("Более 20 этажей", value=False)
+    with_bike = st.sidebar.checkbox("Только с велодорожками", value=False, key="bike_filter")
+    with_pandus = st.sidebar.checkbox("Только с пандусом", value=False, key="pandus_filter")
+    high_rise = st.sidebar.checkbox("Более 20 этажей", value=False, key="high_rise_filter")
     
     # 3. Минимум 3-комнатных
-    min_3room = st.sidebar.number_input("Мин. кол-во 3-комнатных", min_value=0, value=0, step=10)
-
+    min_3room = st.sidebar.number_input("Мин. кол-во 3-комнатных", min_value=0, value=0, step=10, key="min_3room")
     # Применяем фильтры
     filtered_df = df_jk.copy()
     filtered_df = filtered_df[filtered_df["isd"] <= max_isd]
@@ -156,8 +155,8 @@ if mode == "Изучение ЖК":
         jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
         
 elif mode == "Сравнение ЖК":
-    jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0)
-    jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0)
+    jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0, key = "jk_a")
+    jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0, key = "jk_b")
     jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
     jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
 
@@ -180,8 +179,8 @@ if mode == "Изучение ЖК":
         display_jk_df = filtered_df if not filtered_df.empty else df_jk
 elif mode == "Сравнение ЖК":
     # (сохраняем старую логику сравнения — без изменений)
-    jk_a = st.sidebar.selectbox("ЖК A", df_jk["name"].tolist(), index=0)
-    jk_b = st.sidebar.selectbox("ЖК B", df_jk["name"].tolist(), index=1 if len(df_jk) > 1 else 0)
+    jk_a = st.sidebar.selectbox("ЖК A", df_jk["name"].tolist(), index=0, key ="jk_a1")
+    jk_b = st.sidebar.selectbox("ЖК B", df_jk["name"].tolist(), index=1 if len(df_jk) > 1 else 0, key ="jk_b1")
     jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
     jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
     center_lat = (jk_a_data["latitude"] + jk_b_data["latitude"]) / 2

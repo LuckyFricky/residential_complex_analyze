@@ -98,7 +98,7 @@ def load_infrastructure():
 
 
 # ===========================
-# ЗАГРУЗКА ДАННЫХ
+# ОСНОВНАЯ ЛОГИКА
 # ===========================
 df_jk = load_jk_data()
 df_infra = load_infrastructure()
@@ -109,28 +109,39 @@ if df_jk.empty:
     st.stop()
 
 # ===========================
-# САЙДБАР: ВЫБОР ЖК
+# САЙДБАР: ВЫБОР РЕЖИМА
 # ===========================
-st.sidebar.title("🏙️ Выберите жилой комплекс")
+st.sidebar.title("🎛️ Режим работы")
+mode = st.sidebar.radio("Выберите режим:", ["Изучение ЖК", "Сравнение ЖК"])
+
 jk_names = df_jk["name"].tolist()
-selected_jk = st.sidebar.selectbox("ЖК", jk_names, index=0)
-st.session_state.selected_jk_name = selected_jk
+default_a = jk_names[0]
+default_b = jk_names[1] if len(jk_names) > 1 else jk_names[0]
+
+if mode == "Изучение ЖК":
+    selected_jk = st.sidebar.selectbox("Выберите ЖК", jk_names, index=0)
+    jk_data = df_jk[df_jk["name"] == selected_jk].iloc[0].to_dict()
+elif mode == "Сравнение ЖК":
+    jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0)
+    jk_b = st.sidebar.selectbox("ЖК B", jk_names, index=1 if len(jk_names) > 1 else 0)
+    jk_a_data = df_jk[df_jk["name"] == jk_a].iloc[0].to_dict()
+    jk_b_data = df_jk[df_jk["name"] == jk_b].iloc[0].to_dict()
 
 # ===========================
-# ОСНОВНОЙ ИНТЕРФЕЙС
+# КАРТА
 # ===========================
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
 
-# Карта
-selected_row = df_jk[df_jk["name"] == selected_jk].iloc[0]
-m = folium.Map(
-    location=[selected_row["latitude"], selected_row["longitude"]],
-    zoom_start=13,
-    tiles="CartoDB positron"
-)
+if mode == "Изучение ЖК":
+    center_lat, center_lng = jk_data["latitude"], jk_data["longitude"]
+elif mode == "Сравнение ЖК":
+    center_lat = (jk_a_data["latitude"] + jk_b_data["latitude"]) / 2
+    center_lng = (jk_a_data["longitude"] + jk_b_data["longitude"]) / 2
 
-# Маркеры всех ЖК
+m = folium.Map(location=[center_lat, center_lng], zoom_start=12, tiles="CartoDB positron")
+
+# Все ЖК
 for _, row in df_jk.iterrows():
     isd_val = row.get("isd", 0)
     color = "red" if isd_val >= 0.6 else "orange" if isd_val >= 0.4 else "green"
@@ -141,83 +152,136 @@ for _, row in df_jk.iterrows():
         icon=folium.Icon(color=color, icon="home", prefix="fa")
     ).add_to(m)
 
-# Инфраструктура только для выбранного ЖК
+# Инфраструктура
 if not df_infra.empty:
-    current_infra = df_infra[df_infra["jk_name"] == selected_jk]
+    if mode == "Изучение ЖК":
+        infra_list = [selected_jk]
+    else:
+        infra_list = [jk_a, jk_b]
+    
     type_colors = {
         "school": "blue", "kindergarten": "orange", "metro": "purple",
         "park": "green", "shop": "darkred", "hospital": "cadetblue",
         "sports": "pink", "playground": "lightgreen"
     }
-    for _, row in current_infra.iterrows():
-        color = type_colors.get(row["type"], "gray")
-        folium.Marker(
-            location=[row["latitude"], row["longitude"]],
-            popup=f"{row['name']} ({row['type']})",
-            tooltip=row["name"],
-            icon=folium.Icon(color=color, icon="info-sign")
-        ).add_to(m)
+    for jk_name in infra_list:
+        current_infra = df_infra[df_infra["jk_name"] == jk_name]
+        for _, row in current_infra.iterrows():
+            color = type_colors.get(row["type"], "gray")
+            folium.Marker(
+                location=[row["latitude"], row["longitude"]],
+                popup=f"{row['name']} ({row['type']})",
+                tooltip=row["name"],
+                icon=folium.Icon(color=color, icon="info-sign")
+            ).add_to(m)
 
 st_folium(m, width=900, height=500)
 
 # ===========================
-# ДЕТАЛИ ПО ВЫБРАННОМУ ЖК
+# ОСНОВНОЙ КОНТЕНТ
 # ===========================
-st.subheader(f"Подробная информация: 🏢 {selected_jk}")
-jk = df_jk[df_jk["name"] == selected_jk].iloc[0].to_dict()
-
-col_info1, col_info2 = st.columns([1, 2])
-with col_info1:
+if mode == "Изучение ЖК":
+    st.subheader(f"🔍 Подробная информация: 🏢 {selected_jk}")
+    jk = jk_data
     st.metric("Индекс социального дисбаланса (ISD)", f"{jk.get('isd', 0):.3f}")
     st.caption("Чем ближе к 1 — тем сильнее дисбаланс")
 
-with col_info2:
-    st.write(f"**Координаты:** {jk['latitude']:.4f}, {jk['longitude']:.4f}")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Квартиры всего", int(jk.get("all_amount", 0)))
+        st.metric("Студии", int(jk.get("studio_amount", 0)))
+        st.metric("1-комн.", int(jk.get("1_room_amount", 0)))
+    with col2:
+        st.metric("2-комн.", int(jk.get("2_room_amount", 0)))
+        st.metric("3-комн.", int(jk.get("3_room_amount", 0)))
+        st.metric("4+ комнат", int(jk.get("4+_room_amount", 0)))
+    with col3:
+        st.metric("Лифтов", int(jk.get("elevators_amount", 0)))
+        st.metric("Подъездов", int(jk.get("entrances_amount", 0)))
+        st.metric("Машиномест", int(jk.get("places_for_cars_in_parking", 0)))
 
-# Квартиры
-st.markdown("#### 🏠 Структура жилья")
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Квартиры всего", int(jk.get("all_amount", 0)))
-    st.metric("Студии", int(jk.get("studio_amount", 0)))
-    st.metric("1-комн.", int(jk.get("1_room_amount", 0)))
-with col2:
-    st.metric("2-комн.", int(jk.get("2_room_amount", 0)))
-    st.metric("3-комн.", int(jk.get("3_room_amount", 0)))
-    st.metric("4+ комнат", int(jk.get("4+_room_amount", 0)))
-with col3:
-    st.metric("Лифтов", int(jk.get("elevators_amount", 0)))
-    st.metric("Подъездов", int(jk.get("entrances_amount", 0)))
-    st.metric("Машиномест", int(jk.get("places_for_cars_in_parking", 0)))
+    st.markdown("---")
+    st.markdown("#### 📊 Инфраструктура и доступность")
+    infra_col1, infra_col2 = st.columns(2)
+    with infra_col1:
+        st.write(f"- Детских площадок: {int(jk.get('children_playing_zone_amount', 0))}")
+        st.write(f"- Спортивных площадок: {int(jk.get('sports_amount', 0))}")
+        st.write(f"- Велодорожки: {'Да' if jk.get('bicycle_is') else 'Нет'}")
+        st.write(f"- Тротуары: {'Да' if jk.get('sidewalk_amount') else 'Нет'}")
+    with infra_col2:
+        st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
+        st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
+        st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
 
-# Инфраструктура и доступность
-st.markdown("#### 📊 Инфраструктура и доступность")
-infra_col1, infra_col2 = st.columns(2)
-with infra_col1:
-    st.write(f"- Детских площадок: {int(jk.get('children_playing_zone_amount', 0))}")
-    st.write(f"- Спортивных площадок: {int(jk.get('sports_amount', 0))}")
-    st.write(f"- Велодорожки: {'Да' if jk.get('bicycle_is') else 'Нет'}")
-    st.write(f"- Тротуары: {'Да' if jk.get('sidewalk_amount') else 'Нет'}")
-with infra_col2:
-    st.write(f"- Пандус: {'Да' if jk.get('is_pandus') else 'Нет'}")
-    st.write(f"- Инвалидных подъёмников: {int(jk.get('wheelchair_lift_amount', 0))}")
-    st.write(f"- Понижающие бордюры: {'Да' if jk.get('step_down_platforms_is') else 'Нет'}")
+    st.markdown("---")
+    st.markdown("#### 📐 Архитектурные параметры")
+    st.write(f"- Мин. высота потолков: {jk.get('min_ceiling_height', '—')} м")
+    st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
+    st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
+    st.write(f"- Средняя площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
 
-# Архитектура
-st.markdown("#### 📐 Архитектурные параметры")
-st.write(f"- Мин. высота потолков: {jk.get('min_ceiling_height', '—')} м")
-st.write(f"- Макс. высота потолков: {jk.get('max_ceiling_height', '—')} м")
-st.write(f"- Этажность: {int(jk.get('min_floors', 0))}–{int(jk.get('max_floors', 0))}")
-st.write(f"- Средняя площадь квартиры: {jk.get('avg_living_area_m2', '—')} м²")
-
-# Инфраобъекты рядом
-st.markdown("#### 📍 Инфраструктура рядом")
-if not df_infra.empty:
-    current_infra = df_infra[df_infra["jk_name"] == selected_jk]
-    if not current_infra.empty:
-        for _, row in current_infra.iterrows():
-            st.write(f"- **{row['name']}** ({row['type']})")
+    st.markdown("---")
+    st.subheader("📍 Инфраструктура рядом")
+    if not df_infra.empty:
+        current_infra = df_infra[df_infra["jk_name"] == selected_jk]
+        if not current_infra.empty:
+            for _, row in current_infra.iterrows():
+                st.write(f"- **{row['name']}** ({row['type']})")
+        else:
+            st.write("Нет данных об инфраструктуре для этого ЖК.")
     else:
-        st.write("Нет данных об инфраструктуре для этого ЖК.")
-else:
-    st.write("Файл infrastructure.xlsx не загружен.")
+        st.write("Файл infrastructure.xlsx не загружен.")
+
+elif mode == "Сравнение ЖК":
+    st.subheader(f"🆚 Сравнение: {jk_a} vs {jk_b}")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown(f"### 🏢 {jk_a}")
+        st.metric("ISD", f"{jk_a_data['isd']:.3f}")
+        st.metric("Квартиры", int(jk_a_data["all_amount"]))
+        st.metric("Студии", int(jk_a_data["studio_amount"]))
+    with col_b:
+        st.markdown(f"### 🏢 {jk_b}")
+        st.metric("ISD", f"{jk_b_data['isd']:.3f}")
+        st.metric("Квартиры", int(jk_b_data["all_amount"]))
+        st.metric("Студии", int(jk_b_data["studio_amount"]))
+
+    st.markdown("#### 🔍 Ключевые различия")
+    
+    # ISD
+    isd_diff = jk_b_data["isd"] - jk_a_data["isd"]
+    if abs(isd_diff) < 0.01:
+        st.write("✅ **Социальный баланс**: Оба ЖК одинаково сбалансированы.")
+    elif isd_diff > 0:
+        st.write(f"✅ **Социальный баланс**: **{jk_a} более сбалансирован** (ISD ниже на {isd_diff:.3f})")
+    else:
+        st.write(f"✅ **Социальный баланс**: **{jk_b} более сбалансирован** (ISD ниже на {abs(isd_diff):.3f})")
+
+    # Студии
+    studio_a, studio_b = jk_a_data["studio_amount"], jk_b_data["studio_amount"]
+    if studio_a > 0 and studio_b > 0:
+        pct = (studio_a - studio_b) / studio_b * 100
+        if abs(pct) < 5:
+            st.write("🏢 **Студии**: Почти одинаковое количество.")
+        elif pct > 0:
+            st.write(f"🏢 **Студии**: В **{jk_a}** на {pct:.0f}% больше студий.")
+        else:
+            st.write(f"🏢 **Студии**: В **{jk_b}** на {abs(pct):.0f}% больше студий.")
+    elif studio_a > studio_b:
+        st.write(f"🏢 **Студии**: Только в **{jk_a}** есть студии.")
+    elif studio_b > studio_a:
+        st.write(f"🏢 **Студии**: Только в **{jk_b}** есть студии.")
+    else:
+        st.write("🏢 **Студии**: В обоих ЖК студий нет.")
+
+    # Средняя площадь
+    area_a, area_b = jk_a_data.get("avg_living_area_m2", 0), jk_b_data.get("avg_living_area_m2", 0)
+    if area_a > 0 and area_b > 0:
+        area_diff = (area_a - area_b) / area_b * 100
+        if abs(area_diff) < 3:
+            st.write("📐 **Средняя площадь**: Почти одинаковая.")
+        elif area_diff > 0:
+            st.write(f"📐 **Средняя площадь**: В **{jk_a}** квартиры на {area_diff:.0f}% просторнее.")
+        else:
+            st.write(f"📐 **Средняя площадь**: В **{jk_b}** квартиры на {abs(area_diff):.0f}% просторнее.")

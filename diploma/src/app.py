@@ -114,36 +114,17 @@ if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_na
 
 st.sidebar.title("🏙️ Анализ ЖК")
 
-# === ЕДИНЫЙ ВЫБОР ЖК ЧЕРЕЗ САЙДБАР ===
-jk_names = df_jk["name"].tolist()
+# ===========================
+# УДАЛЯЕМ ВЕСЬ САЙДБАРНЫЙ ВЫБОР — ОСТАВЛЯЕМ ТОЛЬКО КАРТУ И КЛИК
+# ===========================
 
-search_query = st.sidebar.text_input("🔍 Поиск ЖК", placeholder="Начните вводить название...")
-if search_query:
-    filtered_names = df_jk[
-        df_jk["name"].str.contains(search_query, case=False, na=False)
-    ]["name"].tolist()
-else:
-    filtered_names = jk_names
-
-if st.session_state.selected_jk_name in filtered_names:
-    current_index = filtered_names.index(st.session_state.selected_jk_name)
-else:
-    current_index = 0
-
-selected_from_ui = st.sidebar.selectbox(
-    "Выберите жилой комплекс",
-    filtered_names,
-    index=current_index,
-    key="jk_selector"
-)
-
-if selected_from_ui != st.session_state.selected_jk_name:
-    st.session_state.selected_jk_name = selected_from_ui
-    st.rerun()
+# Инициализация выбранного ЖК (если ещё не выбран)
+if "selected_jk_name" not in st.session_state or st.session_state.selected_jk_name not in df_jk["name"].values:
+    st.session_state.selected_jk_name = df_jk.iloc[0]["name"]
 
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 st.title("🏙️ Дашборд жилых комплексов Москвы")
-st.markdown("Кликните по метке на карте, чтобы увидеть подробную информацию.")
+st.markdown("Кликните по маркеру ЖК на карте, чтобы увидеть подробную информацию.")
 
 # ===========================
 # КАРТА

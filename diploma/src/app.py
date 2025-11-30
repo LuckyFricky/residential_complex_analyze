@@ -119,22 +119,21 @@ default_a = jk_names[0]
 default_b = jk_names[1] if len(jk_names) > 1 else jk_names[0]
 
 if mode == "Изучение ЖК":
+    if selected_jk is None or jk_data is None:
+        st.info("🏙️ **Добро пожаловать!**\n\nВыберите жилой комплекс в сайдбаре, чтобы увидеть подробную информацию.")
+    else:
+        st.subheader(f"🔍 Подробная информация: 🏢 {selected_jk}")
+        jk = jk_data
     st.sidebar.markdown("### 🧭 Фильтры")
     
-    # 1. Максимальный ISD
-    max_isd = st.sidebar.slider("Макс. ISD", 0.0, 1.0, 1.0, 0.01, key = "max_isd")
-    
-    # 2. Чекбоксы
+    max_isd = st.sidebar.slider("Макс. ISD", 0.0, 1.0, 1.0, 0.01, key="max_isd")
     with_bike = st.sidebar.checkbox("Только с велодорожками", value=False, key="bike_filter")
     with_pandus = st.sidebar.checkbox("Только с пандусом", value=False, key="pandus_filter")
     high_rise = st.sidebar.checkbox("Более 20 этажей", value=False, key="high_rise_filter")
-    
-    # 3. Минимум 3-комнатных
     min_3room = st.sidebar.number_input("Мин. кол-во 3-комнатных", min_value=0, value=0, step=10, key="min_3room")
-    # Применяем фильтры
+
     filtered_df = df_jk.copy()
     filtered_df = filtered_df[filtered_df["isd"] <= max_isd]
-    
     if with_bike:
         filtered_df = filtered_df[filtered_df["bicycle_is"] == 1]
     if with_pandus:
@@ -143,16 +142,25 @@ if mode == "Изучение ЖК":
         filtered_df = filtered_df[filtered_df["max_floors"] > 20]
     if min_3room > 0:
         filtered_df = filtered_df[filtered_df["3_room_amount"] >= min_3room]
-    
-    # Проверка результата
+
     if filtered_df.empty:
         st.sidebar.warning("Нет ЖК, удовлетворяющих фильтрам.")
-        jk_names_filtered = ["(нет данных)"]
-        selected_jk = "(нет данных)"
+        selected_jk = None
+        jk_data = None
     else:
         jk_names_filtered = filtered_df["name"].tolist()
-        selected_jk = st.sidebar.selectbox("Выберите ЖК", jk_names_filtered, index= None, placeholder="Выберите жилой комплекс...", key = "jk_single")
-        jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
+        selected_jk = st.sidebar.selectbox(
+            "Выберите ЖК",
+            jk_names_filtered,
+            index=None,
+            placeholder="Выберите жилой комплекс...",
+            key="jk_single"
+        )
+        # ← КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: проверка перед извлечением
+        if selected_jk is not None and selected_jk in filtered_df["name"].values:
+            jk_data = filtered_df[filtered_df["name"] == selected_jk].iloc[0].to_dict()
+        else:
+            jk_data = None
         
 elif mode == "Сравнение ЖК":
     jk_a = st.sidebar.selectbox("ЖК A", jk_names, index=0)
@@ -172,12 +180,11 @@ st.title("🏙️ Дашборд жилых комплексов Москвы")
 
 # Определяем центр карты
 if mode == "Изучение ЖК":
-    if selected_jk and not filtered_df.empty:
+    if selected_jk is not None and jk_data is not None:
         center_lat, center_lng = jk_data["latitude"], jk_data["longitude"]
         zoom = 13
-        display_jk_df = filtered_df  # ← только отфильтрованные ЖК!
+        display_jk_df = filtered_df
     else:
-        # Если нет фильтров или все отфильтрованы — показываем всё или ничего
         center_lat, center_lng = df_jk["latitude"].mean(), df_jk["longitude"].mean()
         zoom = 11
         display_jk_df = filtered_df if not filtered_df.empty else df_jk

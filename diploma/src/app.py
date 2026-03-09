@@ -354,6 +354,13 @@ m = folium.Map(location=[center_lat, center_lng],
                zoom_start=zoom,
                tiles="https://tile.openstreetmap.org/{z}/{x}/{y}.png",
                attr='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors')
+m.get_root().html.add_child(folium.Element("""
+    <style>
+        .leaflet-control-attribution {
+            display: none !important;
+        }
+    </style>
+"""))
 
 # 1. ВСЕГДА все ЖК
 for _, row in df_jk.iterrows():

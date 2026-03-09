@@ -352,7 +352,7 @@ elif mode == "Сравнение ЖК":
 st.title("🏙️ Дашборд жилых комплексов Москвы")
 m = folium.Map(location=[center_lat, center_lng],
                zoom_start=zoom,
-               tiles="CartoDB positron")
+               tiles="CartoDB dark_matter")
 
 # 1. ВСЕГДА все ЖК
 for _, row in df_jk.iterrows():

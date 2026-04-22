@@ -181,7 +181,7 @@ def load_infrastructure():
 # ===========================
 df_jk = load_jk_data()
 df_infra = load_infrastructure()
-
+df_jk = df_jk.fillna(0)
 if df_jk.empty:
     st.title("🏙️ Дашборд жилых комплексов Москвы")
     st.error("Нет данных по ЖК.")
@@ -195,29 +195,17 @@ if df_jk.empty:
 model = load_isd_model()
 
 if model is not None and not df_jk.empty:
-    # Проверяем наличие всех признаков
-    missing = [c for c in ML_FEATURE_COLS if c not in df_jk.columns]
-    if not missing:
+    try:
         df_prepared = prepare_for_ml(df_jk)
-        # Предсказываем ISD через модель
+        # Модель ждёт percent_of_parking_num, проверяем, создалась ли она
+        if 'percent_of_parking_num' not in df_prepared.columns:
+            raise ValueError("Не удалось сформировать percent_of_parking_num")
+            
         df_jk['isd_ml'] = model.predict(df_prepared[ML_FEATURE_COLS])
         df_jk['isd_ml'] = np.round(df_jk['isd_ml'].clip(0, 1), 3)
-        # >>> DEBUG: проверка различий между формулой и ML
-        if 'isd_ml' in df_jk.columns and not df_jk.empty:
-            diff = (df_jk['isd'] - df_jk['isd_ml']).abs()
-            max_diff = diff.max()
-            n_different = (diff > 0.001).sum()
-            st.sidebar.markdown(f"### 🔍 Отладка ML")
-            st.sidebar.write(f"Макс. разница: **{max_diff:.4f}**")
-            st.sidebar.write(f"ЖК с различиями >0.001: **{n_different}** из {len(df_jk)}")
-            if n_different > 0:
-                st.sidebar.write("Примеры различий:")
-                examples = df_jk.nlargest(3, 'isd')[['name', 'isd', 'isd_ml']]
-                st.sidebar.dataframe(examples)
-# <<< DEBUG
-    else:
-        st.sidebar.warning(f"⚠️ ML: отсутствуют колонки {missing}")
-        df_jk['isd_ml'] = df_jk['isd']  # fallback на формулу
+    except Exception as e:
+        st.sidebar.error(f"⚠️ ML ошибка: {e}")
+        df_jk['isd_ml'] = df_jk['isd']  # автоматический откат к формуле
 else:
     df_jk['isd_ml'] = df_jk['isd']
 

@@ -4,9 +4,47 @@ import folium
 from streamlit_folium import st_folium
 import os
 import numpy as np
+from catboost import CatBoostRegressor  # >>> ML: импорт модели
 
 st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
+# ===========================
+# >>> ML: ЗАГРУЗКА МОДЕЛИ И ПОДГОТОВКА ПРИЗНАКОВ
+# ===========================
+@st.cache_resource
+def load_isd_model():
+    """Загружает CatBoost-модель один раз при старте приложения"""
+    model_path = os.path.join(os.path.dirname(__file__), "models", "isd_model.cbm")
+    if not os.path.exists(model_path):
+        return None
+    return CatBoostRegressor().load_model(model_path)
 
+# Список признаков, на которых обучена модель (должен точно совпадать с train_model.py)
+ML_FEATURE_COLS = [
+    'all_amount', 'studio_amount', '1_room_amount', '2_room_amount',
+    '3_room_amount', '4+_room_amount', 'avg_flats_on_floor',
+    'not_living_amount', 'places_for_cars_in_parking',
+    'guest_places_for_cars_on_territory', 'guest_places_for_cars_near_territory',
+    'percent_of_parking', 'amount_other_not_living', 'living_area_m2',
+    'avg_living_area_m2', 'min_ceiling_height', 'max_ceiling_height',
+    'min_floors', 'max_floors', 'elevators_amount', 'entrances_amount',
+    'elevators_on_entracne', 'children_playing_zone_amount', 'sports_amount',
+    'bicycle_is', 'sidewalk_amount', 'garbage_area_amount',
+    'step_down_platforms_is', 'is_pandus', 'wheelchair_lift_amount'
+]
+
+def prepare_for_ml(df):
+    """Подготавливает DataFrame для подачи в модель"""
+    df_out = df.copy()
+    # percent_of_parking хранится как строка "171.76%", конвертируем в число
+    if 'percent_of_parking' in df_out.columns:
+        df_out['percent_of_parking'] = (
+            df_out['percent_of_parking']
+            .astype(str)
+            .str.replace('%', '', regex=False)
+            .astype(float)
+        )
+    return df_out
+# <<< ML: конец блока подготовки
 
 # ===========================
 # ЗАГРУЗКА ДАННЫХ + РАСЧЁТ ISD (УЛУЧШЕННЫЙ)
@@ -150,6 +188,32 @@ if df_jk.empty:
     st.error("Нет данных по ЖК.")
     st.stop()
 
+
+# ===========================
+# >>> ML: ПРЕДСКАЗАНИЕ И ПЕРЕКЛЮЧАТЕЛЬ
+# ===========================
+# Загружаем модель
+model = load_isd_model()
+
+if model is not None and not df_jk.empty:
+    # Проверяем наличие всех признаков
+    missing = [c for c in ML_FEATURE_COLS if c not in df_jk.columns]
+    if not missing:
+        df_prepared = prepare_for_ml(df_jk)
+        # Предсказываем ISD через модель
+        df_jk['isd_ml'] = model.predict(df_prepared[ML_FEATURE_COLS])
+        df_jk['isd_ml'] = np.round(df_jk['isd_ml'].clip(0, 1), 3)
+    else:
+        st.sidebar.warning(f"⚠️ ML: отсутствуют колонки {missing}")
+        df_jk['isd_ml'] = df_jk['isd']  # fallback на формулу
+else:
+    df_jk['isd_ml'] = df_jk['isd']
+
+# По умолчанию используем формулу, пользователь может переключить
+if 'use_ml_isd' not in st.session_state:
+    st.session_state.use_ml_isd = False
+# <<< ML: конец блока предсказания
+
 # ===========================
 # ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
 # ===========================
@@ -162,8 +226,19 @@ if "filters_applied" not in st.session_state:
 # САЙДБАР (ЕДИНСТВЕННЫЙ!)
 # ===========================
 st.sidebar.title("🎛️ Режим работы")
+# >>> ML: переключатель источника ISD
+use_ml = st.sidebar.checkbox("Использовать ML-прогноз ISD", 
+                             value=st.session_state.use_ml_isd,
+                             key="ml_toggle")
+st.session_state.use_ml_isd = use_ml
+
+# Создаем активную колонку: либо формула, либо модель
+df_jk['isd_active'] = df_jk['isd_ml'] if use_ml else df_jk['isd']
+# <<< ML
 mode = st.sidebar.radio("Выберите режим:", ["Изучение ЖК", "Сравнение ЖК"],
                         key="mode_radio")
+
+
 
 jk_names = df_jk["name"].tolist()
 
@@ -213,7 +288,7 @@ if mode == "Изучение ЖК":
 
     # === ФИЛЬТРАЦИЯ (всегда обновляется на основе текущих значений)
     filtered_df = df_jk.copy()
-    filtered_df = filtered_df[filtered_df["isd"] <= max_isd]
+    filtered_df = filtered_df[filtered_df["isd_active"] <= max_isd]
     filtered_df = filtered_df[filtered_df["studio_pct"] <= max_studio]
     filtered_df = filtered_df[filtered_df["large_flats_pct"] >= min_family]
     filtered_df = filtered_df[filtered_df["parking_raw"] >= min_parking]
@@ -244,7 +319,7 @@ if mode == "Изучение ЖК":
     if not filtered_df.empty:
         filtered_df_display = filtered_df.copy()
         filtered_df_display["display_name"] = filtered_df_display.apply(
-            lambda row: f"{row['name']} (ISD: {row['isd']:.3f})", axis=1)
+            lambda row: f"{row['name']} (ISD: {row['isd_active']:.3f})", axis=1)
         display_options = ["None"
                            ] + filtered_df_display["display_name"].tolist()
 
@@ -364,7 +439,7 @@ m.get_root().html.add_child(folium.Element("""
 
 # 1. ВСЕГДА все ЖК
 for _, row in df_jk.iterrows():
-    isd_val = row.get("isd", 0)
+    isd_val = row.get("isd_active", 0)
     color = "red" if isd_val >= 0.6 else "orange" if isd_val >= 0.4 else "green"
     folium.Marker([row["latitude"], row["longitude"]],
                   popup=f"{row['name']}<br>ISD: {isd_val:.3f}",
@@ -413,11 +488,21 @@ if mode == "Изучение ЖК" and (selected_jk is None or jk_data is None):
     st.info(
         "🏙️ **Добро пожаловать!**\n\nВыберите жилой комплекс в сайдбаре, чтобы увидеть подробную информацию."
     )
+    # >>> ML: подсказка про переключатель
+    if model is not None:
+        st.caption("💡 В сайдбаре есть переключатель «Использовать ML-прогноз ISD» для сравнения подходов")
+    # <<<
+
 elif mode == "Изучение ЖК" and selected_jk is not None and jk_data is not None:
     st.subheader(f"🔍 Подробная информация: 🏢 {selected_jk}")
     jk = jk_data
-    st.metric("Индекс социального дисбаланса (ISD)", f"{jk.get('isd', 0):.3f}")
+
+    # >>> ML: отображаем активный ISD и источник
+    active_isd = jk.get('isd_active', 0)
+    source_label = " (ML-прогноз)" if use_ml else " (формула)"
+    st.metric("Индекс социального дисбаланса (ISD)", f"{active_isd:.3f}", source_label)
     st.caption("Чем ближе к 1 — тем сильнее дисбаланс")
+    # <<<
 
     # === РАЗВЁРНУТЫЙ ISD ПО КОМПОНЕНТАМ ===
     col1, col2, col3, col4 = st.columns(4)
@@ -784,30 +869,30 @@ elif mode == "Сравнение ЖК" and st.session_state.compare_applied and 
 
     # === ИТОГОВЫЙ ВЕРДИКТ ===
     st.markdown("#### 🎯 Итоговый рейтинг")
-    isd_diff = jk_b_data["isd"] - jk_a_data["isd"]
+    isd_a = jk_a_data["isd_active"]  # >>> ML: используем активный ISD
+    isd_b = jk_b_data["isd_active"]
+    isd_diff = isd_b - isd_a
 
     col_win, col_lose = st.columns(2)
     if isd_diff > 0:
-        # A лучше (меньше ISD)
         with col_win:
             st.markdown(f"### 🥇 **{jk_a}**")
-            st.success(f"**ISD**: {jk_a_data['isd']:.3f} **(лидер)**")
+            st.success(f"**ISD**: {isd_a:.3f} **(лидер)**")
             st.success("• Меньше студий")
             st.success("• Больше семейного жилья")
         with col_lose:
             st.markdown(f"### 🥈 **{jk_b}**")
-            st.warning(f"**ISD**: {jk_b_data['isd']:.3f}")
+            st.warning(f"**ISD**: {isd_b:.3f}")
     elif isd_diff < 0:
-        # B лучше
         with col_win:
             st.markdown(f"### 🥇 **{jk_b}**")
-            st.success(f"**ISD**: {jk_b_data['isd']:.3f} **(лидер)**")
+            st.success(f"**ISD**: {isd_b:.3f} **(лидер)**")
             st.success("• Меньше студий")
             st.success("• Больше семейного жилья")
         with col_lose:
             st.markdown(f"### 🥈 **{jk_a}**")
-            st.warning(f"**ISD**: {jk_a_data['isd']:.3f}")
+            st.warning(f"**ISD**: {isd_a:.3f}")
     else:
         st.markdown("### 🤝 **Ничья!**")
-        st.info(f"**ISD**: {jk_a_data['isd']:.3f} (равные по балансу)")
+        st.info(f"**ISD**: {isd_a:.3f} (равные по балансу)")
 

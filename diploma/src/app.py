@@ -13,7 +13,7 @@ st.set_page_config(page_title="Анализ ЖК Москвы", layout="wide")
 @st.cache_resource
 def load_isd_model():
     """Загружает CatBoost-модель один раз при старте приложения"""
-    model_path = os.path.join(os.path.dirname(__file__), "models", "isd_model.cbm")
+    model_path = os.path.join(os.path.dirname(__file__), "..", "model", "isd_model.cbm")
     if not os.path.exists(model_path):
         return None
     return CatBoostRegressor().load_model(model_path)
@@ -203,6 +203,19 @@ if model is not None and not df_jk.empty:
         # Предсказываем ISD через модель
         df_jk['isd_ml'] = model.predict(df_prepared[ML_FEATURE_COLS])
         df_jk['isd_ml'] = np.round(df_jk['isd_ml'].clip(0, 1), 3)
+        # >>> DEBUG: проверка различий между формулой и ML
+        if 'isd_ml' in df_jk.columns and not df_jk.empty:
+            diff = (df_jk['isd'] - df_jk['isd_ml']).abs()
+            max_diff = diff.max()
+            n_different = (diff > 0.001).sum()
+            st.sidebar.markdown(f"### 🔍 Отладка ML")
+            st.sidebar.write(f"Макс. разница: **{max_diff:.4f}**")
+            st.sidebar.write(f"ЖК с различиями >0.001: **{n_different}** из {len(df_jk)}")
+            if n_different > 0:
+                st.sidebar.write("Примеры различий:")
+                examples = df_jk.nlargest(3, 'isd')[['name', 'isd', 'isd_ml']]
+                st.sidebar.dataframe(examples)
+# <<< DEBUG
     else:
         st.sidebar.warning(f"⚠️ ML: отсутствуют колонки {missing}")
         df_jk['isd_ml'] = df_jk['isd']  # fallback на формулу

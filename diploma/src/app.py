@@ -24,7 +24,7 @@ ML_FEATURE_COLS = [
     '3_room_amount', '4+_room_amount', 'avg_flats_on_floor',
     'not_living_amount', 'places_for_cars_in_parking',
     'guest_places_for_cars_on_territory', 'guest_places_for_cars_near_territory',
-    'percent_of_parking', 'amount_other_not_living', 'living_area_m2',
+    'percent_of_parking_num', 'amount_other_not_living', 'living_area_m2',
     'avg_living_area_m2', 'min_ceiling_height', 'max_ceiling_height',
     'min_floors', 'max_floors', 'elevators_amount', 'entrances_amount',
     'elevators_on_entracne', 'children_playing_zone_amount', 'sports_amount',
@@ -35,16 +35,15 @@ ML_FEATURE_COLS = [
 def prepare_for_ml(df):
     """Подготавливает DataFrame для подачи в модель"""
     df_out = df.copy()
-    # percent_of_parking хранится как строка "171.76%", конвертируем в число
+    # Берём исходную колонку с "%", очищаем и создаём новую с точным именем из обучения
     if 'percent_of_parking' in df_out.columns:
-        df_out['percent_of_parking'] = (
+        df_out['percent_of_parking_num'] = (
             df_out['percent_of_parking']
             .astype(str)
             .str.replace('%', '', regex=False)
             .astype(float)
         )
     return df_out
-# <<< ML: конец блока подготовки
 
 # ===========================
 # ЗАГРУЗКА ДАННЫХ + РАСЧЁТ ISD (УЛУЧШЕННЫЙ)
